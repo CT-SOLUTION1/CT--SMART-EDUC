@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#071b34">
+  <meta name="description" content="CT-SMART EDUC live lessons with teacher-controlled learner entry.">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>CT-SMART EDUC | Live Lessons</title>
 <style>
 :root{--navy:#071b34;--blue:#155da8;--green:#238b45;--bg:#f4f7fb;--text:#172033;--muted:#687386;--white:#fff;--border:#dbe3ee;--danger:#d93636}
@@ -14,10 +19,10 @@ section{padding:42px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px
 h2,h3{margin-top:0}label{display:block;font-size:.82rem;font-weight:700;margin:12px 0 6px}input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font:inherit}
 button{border:0;border-radius:8px;padding:12px 16px;font-weight:700;cursor:pointer;font:inherit}.blue{background:var(--blue);color:#fff}.green{background:var(--green);color:#fff}.red{background:var(--danger);color:#fff}.wide{width:100%;margin-top:16px}
 .codebox{display:none;margin-top:18px;padding:16px;background:#edf7ef;border:1px solid #c3e1ca;border-radius:10px}.code{font-size:1.8rem;font-weight:900;letter-spacing:1px;color:var(--green);word-break:break-word}
-.info{font-size:.84rem;color:var(--muted);line-height:1.6}.dashboard-choice{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px}
-.dashboard-tile{border:2px solid var(--border);border-radius:18px;padding:32px 22px;text-align:center;background:#fff;box-shadow:0 10px 30px rgba(10,35,70,.08);cursor:pointer;transition:.2s}
+.info{font-size:.84rem;color:var(--muted);line-height:1.6}.dashboard-choice{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:24px;max-width:720px;margin-left:auto;margin-right:auto}
+.dashboard-tile{min-width:0;border:2px solid var(--border);border-radius:15px;padding:20px 14px;text-align:center;background:#fff;box-shadow:0 10px 30px rgba(10,35,70,.08);cursor:pointer;transition:.2s}
 .dashboard-tile:hover{transform:translateY(-3px);border-color:var(--blue)}
-.dashboard-tile .tile-icon{font-size:3.2rem;margin-bottom:12px}
+.dashboard-tile .tile-icon{font-size:2.4rem;margin-bottom:12px}
 .dashboard-tile h2{margin:8px 0}.dashboard-tile p{color:var(--muted);line-height:1.5}
 .dashboard-panel{display:none}
 .access-box{max-width:520px;margin:0 auto;background:#fff;border:1px solid var(--border);border-radius:15px;padding:24px;box-shadow:0 10px 30px rgba(10,35,70,.08)}
@@ -28,7 +33,8 @@ button{border:0;border-radius:8px;padding:12px 16px;font-weight:700;cursor:point
 .waiter{border:1px solid var(--border);padding:12px;border-radius:10px;margin-bottom:10px}.waiter-name{font-weight:800;margin-bottom:8px}.waiter-actions{display:flex;gap:7px}.waiter-actions button{padding:8px 10px;font-size:.78rem}
 .empty{text-align:center;color:var(--muted);font-size:.85rem;padding:28px 8px}.room-top{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.pill{background:#e8f1ff;color:var(--blue);padding:7px 10px;border-radius:20px;font-size:.78rem;font-weight:800}
 footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-size:.85rem}
-@media(max-width:900px){.grid,.meeting-layout,.dashboard-choice{grid-template-columns:1fr}.meeting{height:520px}.waiting{order:-1}}
+@media(max-width:600px){.dashboard-choice{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dashboard-tile{padding:16px 8px}.dashboard-tile .tile-icon{font-size:2rem}.dashboard-tile h2{font-size:1.05rem}.dashboard-tile p{font-size:.78rem}}
+@media(max-width:900px){.grid,.meeting-layout{grid-template-columns:1fr}.meeting{height:520px}.waiting{order:-1}}
 </style>
 <script src="https://meet.jit.si/external_api.js"></script>
 </head>
@@ -36,7 +42,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 <header>
 <div class="container">
 <div class="brand">🎓 CT-SMART EDUC<span class="tag">Anywhere, Learn, Understand, Apply</span><span style="display:block;color:#ffffff;font-size:.72rem;margin-top:6px;letter-spacing:.5px">HOST: DADDY FAVOUR | CONTACT: 0757132542 / 0786814513 / 0755694263</span></div>
-<div class="hero">
+<div class="hero" id="introHero" style="display:none">
 <h1>Temporary Codes.<br><span>Teacher-Controlled Entry.</span></h1>
 <p>The teacher starts a live lesson, activates the waiting lobby, and sees learners who are waiting. The teacher then chooses <b>Accept</b> or <b>Reject</b> for each learner.</p>
 </div>
@@ -63,6 +69,12 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
         <h2>Learner</h2>
         <p>Join a live lesson using your lesson code.</p>
       </div>
+
+      <div class="dashboard-tile" onclick="openFounderAccess()">
+        <div class="tile-icon">👑</div>
+        <h2>Founder</h2>
+        <p>Manage access, security and teacher settings.</p>
+      </div>
     </div>
   </div>
 </div>
@@ -85,7 +97,11 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
       <h2>👨‍🏫 Teacher: Start a Lesson</h2>
       <label>Your Name</label><input id="teacherName" placeholder="Enter teacher name">
       <label>Subject</label>
-      <select id="subject"><option>Mathematics</option><option>English</option><option>Geography</option><option>Biology</option><option>Physics</option><option>Chemistry</option></select>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="subject" style="flex:1"><option>Mathematics</option><option>English</option><option>Geography</option><option>Biology</option><option>Physics</option><option>Chemistry</option></select>
+        <button type="button" class="blue" onclick="addSubject()" title="Add another subject">+ Add</button>
+      </div>
+      <div id="subjectList" class="info" style="margin-top:8px">More subjects can be added by the teacher.</div>
       <label>Lesson Title</label><input id="lessonTitle" placeholder="e.g. Algebra Revision">
       <button class="green wide" onclick="startTeacherLesson()">Create Code & Start Teacher Room</button>
       <div id="teacherCodeBox" class="codebox">
@@ -94,6 +110,48 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
         <p class="info">Learners enter this code and their name. When the lobby is active, they wait until you accept them.</p>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="founderAccess" class="dashboard-panel">
+  <div class="access-box">
+    <button class="back-btn" onclick="backToDashboard()">← Back</button>
+    <h2>👑 Founder Access</h2>
+    <p class="info">Enter the built-in founder code to open the control panel.</p>
+    <label>Founder Access Code</label>
+    <input id="founderAccessCode" type="password" placeholder="Enter founder code">
+    <button class="green wide" onclick="verifyFounderAccess()">Open Founder Panel</button>
+  </div>
+</div>
+
+<div id="founderDashboard" class="dashboard-panel">
+  <div class="card">
+    <button class="back-btn" onclick="backToDashboard()">← Dashboard</button>
+    <h2>👑 Founder Control Panel</h2>
+    <div class="notice" style="margin-bottom:18px">
+      <b>Security control:</b><br>
+      <span class="info">These controls are stored in this browser. A true server-wide lock or centrally shared access code requires a backend/database.</span>
+    </div>
+
+    <h3>🔐 Teacher Access Code</h3>
+    <label>Current Teacher Access Code</label>
+    <input id="currentTeacherCode" type="password" readonly>
+    <label>New Teacher Access Code</label>
+    <input id="newTeacherCode" type="password" placeholder="Enter a new code">
+    <button class="blue wide" onclick="changeTeacherAccessCode()">Change Teacher Access Code</button>
+
+    <hr style="border:0;border-top:1px solid var(--border);margin:24px 0">
+    <h3>🔒 User Access Locks</h3>
+    <label style="display:flex;gap:9px;align-items:center;cursor:pointer">
+      <input id="lockTeacher" type="checkbox" onchange="saveLocks()" style="width:auto">
+      <span>Lock Teacher Dashboard</span>
+    </label>
+    <label style="display:flex;gap:9px;align-items:center;cursor:pointer">
+      <input id="lockLearner" type="checkbox" onchange="saveLocks()" style="width:auto">
+      <span>Lock Learner Dashboard</span>
+    </label>
+    <button class="red wide" onclick="lockAllUsers()">Lock All Teacher & Learner Access</button>
+    <button class="green wide" onclick="unlockAllUsers()">Unlock Teacher & Learner Access</button>
   </div>
 </div>
 
@@ -222,6 +280,8 @@ function hideDashboards(){
   document.getElementById('teacherAccess').style.display='none';
   document.getElementById('teacherDashboard').style.display='none';
   document.getElementById('learnerDashboard').style.display='none';
+  document.getElementById('founderAccess').style.display='none';
+  document.getElementById('founderDashboard').style.display='none';
 }
 
 function backToDashboard(){
@@ -229,7 +289,19 @@ function backToDashboard(){
   document.getElementById('dashboardChoice').style.display='block';
 }
 
+const DEFAULT_TEACHER_ACCESS_CODE='EDUC';
+const LUCK_ACCESS_CODE='LUCK';
+
+function getTeacherAccessCode(){
+  return localStorage.getItem('ctsmart_teacher_access_code') || DEFAULT_TEACHER_ACCESS_CODE;
+}
+
+function isLocked(type){
+  return localStorage.getItem('ctsmart_lock_'+type)==='true';
+}
+
 function openTeacherAccess(){
+  if(isLocked('teacher')){ alert('Teacher access is currently locked by the founder.'); return; }
   hideDashboards();
   document.getElementById('teacherAccess').style.display='block';
   document.getElementById('teacherAccessCode').value='';
@@ -237,8 +309,9 @@ function openTeacherAccess(){
 }
 
 function verifyTeacherAccess(){
+  if(isLocked('teacher')){ alert('Teacher access is currently locked by the founder.'); return; }
   const code=document.getElementById('teacherAccessCode').value.trim().toUpperCase();
-  if(code!=='EDUC'){
+  if(code!==getTeacherAccessCode().toUpperCase()){
     alert('Incorrect teacher access code. Please enter the correct code.');
     return;
   }
@@ -247,8 +320,87 @@ function verifyTeacherAccess(){
 }
 
 function openLearnerDashboard(){
+  if(isLocked('learner')){ alert('Learner access is currently locked by the founder.'); return; }
   hideDashboards();
   document.getElementById('learnerDashboard').style.display='block';
+}
+
+function openFounderAccess(){
+  hideDashboards();
+  document.getElementById('founderAccess').style.display='block';
+  document.getElementById('founderAccessCode').value='';
+  setTimeout(()=>document.getElementById('founderAccessCode').focus(),50);
+}
+
+function verifyFounderAccess(){
+  const code=document.getElementById('founderAccessCode').value.trim().toUpperCase();
+  if(code!==LUCK_ACCESS_CODE){
+    alert('Incorrect founder access code.');
+    return;
+  }
+  hideDashboards();
+  document.getElementById('founderDashboard').style.display='block';
+  loadFounderSettings();
+}
+
+function loadFounderSettings(){
+  document.getElementById('currentTeacherCode').value=getTeacherAccessCode();
+  document.getElementById('newTeacherCode').value='';
+  document.getElementById('lockTeacher').checked=isLocked('teacher');
+  document.getElementById('lockLearner').checked=isLocked('learner');
+}
+
+function changeTeacherAccessCode(){
+  const newCode=document.getElementById('newTeacherCode').value.trim();
+  if(newCode.length<4){ alert('Teacher access code must contain at least 4 characters.'); return; }
+  localStorage.setItem('ctsmart_teacher_access_code',newCode);
+  document.getElementById('currentTeacherCode').value=newCode;
+  document.getElementById('newTeacherCode').value='';
+  alert('Teacher access code changed successfully.');
+}
+
+function saveLocks(){
+  localStorage.setItem('ctsmart_lock_teacher',document.getElementById('lockTeacher').checked);
+  localStorage.setItem('ctsmart_lock_learner',document.getElementById('lockLearner').checked);
+  alert('Access settings saved.');
+}
+
+function lockAllUsers(){
+  localStorage.setItem('ctsmart_lock_teacher','true');
+  localStorage.setItem('ctsmart_lock_learner','true');
+  loadFounderSettings();
+  alert('Teacher and learner access are now locked.');
+}
+
+function unlockAllUsers(){
+  localStorage.setItem('ctsmart_lock_teacher','false');
+  localStorage.setItem('ctsmart_lock_learner','false');
+  loadFounderSettings();
+  alert('Teacher and learner access are now unlocked.');
+}
+
+function applyAccessLocks(){
+  const teacherTile=document.querySelector('.dashboard-tile[onclick="openTeacherAccess()"]');
+  const learnerTile=document.querySelector('.dashboard-tile[onclick="openLearnerDashboard()"]');
+  if(teacherTile){ teacherTile.style.opacity=isLocked('teacher')?'.5':'1'; }
+  if(learnerTile){ learnerTile.style.opacity=isLocked('learner')?'.5':'1'; }
+}
+
+window.addEventListener('load',applyAccessLocks);
+
+function addSubject(){
+  const name=prompt('Enter the subject name:');
+  if(!name) return;
+  const clean=name.trim();
+  if(!clean) return;
+  const select=document.getElementById('subject');
+  const exists=[...select.options].some(o=>o.value.toLowerCase()===clean.toLowerCase());
+  if(exists){ alert('That subject is already available.'); return; }
+  const option=document.createElement('option');
+  option.textContent=clean; option.value=clean;
+  select.appendChild(option); select.value=clean;
+  const list=document.getElementById('subjectList');
+  list.textContent='Available subjects: '+[...select.options].map(o=>o.textContent).join(', ');
 }
 
 function startTeacherLesson(){
@@ -308,6 +460,15 @@ function answerWaiting(id,approved){
   waiting.delete(id);renderWaiting();
 }
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
 </script>
 </body>
 </html>
