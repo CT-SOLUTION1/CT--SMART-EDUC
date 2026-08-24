@@ -7,42 +7,48 @@ const APP_SHELL = [
   './icons/icon-512.png'
 ];
 
-self.addEventListener('install', event => {
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(key => key !== CACHE_NAME)
-            .map(key => caches.delete(key))
-      )
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-  const request = event.request;
+// Network-first for navigation/HTML so updates show up quickly,
+// cache-first for everything else (icons, manifest, static assets).
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
 
-  // Keep live Jitsi/API traffic online rather than caching it.
-  if (request.url.includes('meet.jit.si')) return;
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
 
   event.respondWith(
-    caches.match(request).then(cached => {
+    caches.match(req).then((cached) => {
       if (cached) return cached;
-
-      return fetch(request).then(response => {
-        if (response.ok && new URL(request.url).origin === self.location.origin) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-        }
-        return response;
-      }).catch(() => caches.match('./index.html'));
+      return fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        return res;
+      }).catch(() => cached);
     })
   );
 });
