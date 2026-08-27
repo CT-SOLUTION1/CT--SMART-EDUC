@@ -397,34 +397,7 @@ async function authenticateWithCode(role,code){
   }
 }
 
-const GOOGLE_MEET_LINK='https://meet.google.com/ipj-aihy-oou';
 const FOUNDER_EMAIL='founder@ctsmart.educ';
-
-function normalizeCode(code){
-  return (code||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'');
-}
-
-async function signInFounder(code){
-  const clean=normalizeCode(code);
-  if(!clean) throw new Error('Please enter the Founder access code.');
-  try{
-    const credential=await window.firebaseApi.signInWithEmailAndPassword(
-      window.firebaseAuth,FOUNDER_EMAIL,clean
-    );
-    const token=await credential.user.getIdTokenResult(true);
-    if(token.claims.founder!==true){
-      await window.firebaseApi.signOut(window.firebaseAuth);
-      throw new Error('This account is not authorized as Founder.');
-    }
-    return credential.user;
-  }catch(err){
-    if(err.message==='This account is not authorized as Founder.') throw err;
-    if(err.code==='auth/invalid-credential' || err.code==='auth/wrong-password' || err.code==='auth/user-not-found'){
-      throw new Error('Incorrect Founder access code.');
-    }
-    throw err;
-  }
-}
 
 async function saveAccessSettings(){
   const call=window.firebaseApi.httpsCallable(
@@ -515,9 +488,8 @@ async function signInFounder(code){
 
   // The Founder account is a real Firebase Authentication account.
   // Its password is the Founder credential; its Firebase custom claim is founder:true.
-  const email=systemEmail('founder',clean);
   const credential=await window.firebaseApi.signInWithEmailAndPassword(
-    window.firebaseAuth,email,clean
+    window.firebaseAuth,FOUNDER_EMAIL,clean
   );
 
   const token=await credential.user.getIdTokenResult(true);
@@ -582,48 +554,25 @@ async function saveBothAccessCodes(){
 async function changeTeacherAccessCode(){
   const newCode=normalizeCode(document.getElementById('newTeacherCode').value);
   if(newCode.length<4){ alert('Teacher access code must contain at least 4 characters.'); return; }
-  const currentLearner=accessSettings._pendingLearnerCode || '';
-  if(!currentLearner){
-    alert('For security, enter/update the learner code first when the system has not yet been configured.');
-    return;
-  }
   try{
-    const call=window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'setSchoolAccessCodes'
-    );
-    await call({teacherCode:newCode,learnerCode:currentLearner});
-    accessSettings.teacherCode=newCode;
-    document.getElementById('currentTeacherCode').value='Updated';
+    const call=window.firebaseApi.httpsCallable(window.firebaseFunctions,'setTeacherAccessCode');
+    await call({teacherCode:newCode});
     document.getElementById('newTeacherCode').value='';
-    await loadAccessSettings();
-    document.getElementById('currentTeacherCode').value=accessSettings.teacherCodeMasked || 'Configured';
+    await loadFounderSettings();
     alert('Teacher access code updated securely in Firebase.');
-  }catch(err){
-    alert(err?.message || 'Unable to update the teacher code.');
-  }
+  }catch(err){ alert(err?.message || 'Unable to update the teacher code.'); }
 }
+
 async function changeLearnerAccessCode(){
   const newCode=normalizeCode(document.getElementById('newLearnerCode').value);
   if(newCode.length<4){ alert('Learner access code must contain at least 4 characters.'); return; }
-  const currentTeacher=accessSettings._pendingTeacherCode || '';
-  if(!currentTeacher){
-    alert('For security, enter/update the teacher code first when the system has not yet been configured.');
-    return;
-  }
   try{
-    const call=window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'setSchoolAccessCodes'
-    );
-    await call({learnerCode:newCode,teacherCode:currentTeacher});
-    accessSettings.learnerCode=newCode;
-    document.getElementById('currentLearnerCode').value='Updated';
+    const call=window.firebaseApi.httpsCallable(window.firebaseFunctions,'setLearnerAccessCode');
+    await call({learnerCode:newCode});
     document.getElementById('newLearnerCode').value='';
-    await loadAccessSettings();
-    document.getElementById('currentLearnerCode').value=accessSettings.learnerCodeMasked || 'Configured';
+    await loadFounderSettings();
     alert('Learner access code updated securely in Firebase.');
-  }catch(err){
-    alert(err?.message || 'Unable to update the learner code.');
-  }
+  }catch(err){ alert(err?.message || 'Unable to update the learner code.'); }
 }
 async function saveLocks(){
   const learnerLocked=document.getElementById('lockLearner').checked;

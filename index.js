@@ -147,3 +147,27 @@ exports.verifySharedAccessCode = onCall(async (request) => {
 
   return { ok: true, role };
 });
+/** Founder changes only the shared Teacher code. */
+exports.setTeacherAccessCode = onCall(async (request) => {
+  requireFounder(request);
+  const teacherCode = cleanCode((request.data || {}).teacherCode, "Teacher code");
+  await ACCESS_REF.set({
+    teacherCode,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid
+  }, { merge: true });
+  return { ok: true };
+});
+
+/** Founder changes only the shared Learner code. */
+exports.setLearnerAccessCode = onCall(async (request) => {
+  requireFounder(request);
+  const learnerCode = cleanCode((request.data || {}).learnerCode, "Learner code");
+  await ACCESS_REF.set({
+    learnerCode,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid
+  }, { merge: true });
+  return { ok: true };
+});
+
