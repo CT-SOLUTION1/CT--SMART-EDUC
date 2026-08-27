@@ -23,7 +23,7 @@ section{padding:42px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px
 h2,h3{margin-top:0}label{display:block;font-size:.82rem;font-weight:700;margin:12px 0 6px}input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font:inherit}
 button{border:0;border-radius:8px;padding:12px 16px;font-weight:700;cursor:pointer;font:inherit}.blue{background:var(--blue);color:#fff}.green{background:var(--green);color:#fff}.red{background:var(--danger);color:#fff}.wide{width:100%;margin-top:16px}
 .codebox{display:none;margin-top:18px;padding:16px;background:#edf7ef;border:1px solid #c3e1ca;border-radius:10px}.code{font-size:1.8rem;font-weight:900;letter-spacing:1px;color:var(--green);word-break:break-word}
-.info{font-size:.84rem;color:var(--muted);line-height:1.6}.dashboard-choice{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:24px;max-width:720px;margin-left:auto;margin-right:auto}
+.info{font-size:.84rem;color:var(--muted);line-height:1.6}.dashboard-choice{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:24px;max-width:920px;margin-left:auto;margin-right:auto}
 .dashboard-tile{min-width:0;border:2px solid var(--border);border-radius:15px;padding:20px 14px;text-align:center;background:#fff;box-shadow:0 10px 30px rgba(10,35,70,.08);cursor:pointer;transition:.2s}
 .dashboard-tile:hover{transform:translateY(-3px);border-color:var(--blue)}
 .dashboard-tile .tile-icon{font-size:2.4rem;margin-bottom:12px}
@@ -44,14 +44,24 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
   import {
     getAuth,
+    createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    updatePassword,
+    reauthenticateWithCredential,
+    EmailAuthProvider,
+    setPersistence,
+    browserLocalPersistence,
+    inMemoryPersistence
   } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
   import {
-    getFunctions,
-    httpsCallable
-  } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-functions.js";
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAazmoaEKQzdF9rXh7rPDNocml6lduhcB4",
@@ -64,12 +74,40 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 
   const firebaseApp = initializeApp(firebaseConfig);
   window.firebaseAuth = getAuth(firebaseApp);
-  window.firebaseFunctions = getFunctions(firebaseApp, "us-central1");
+  window.firebaseDb = getFirestore(firebaseApp);
+
+  // A second, isolated Firebase App/Auth instance. This lets the Founder
+  // sign in as the Teacher or Learner system account (to change its code)
+  // WITHOUT signing the Founder's own browser session out — each Auth
+  // instance keeps its own currentUser independently.
+  const firebaseSecondaryApp = initializeApp(firebaseConfig,'ct-smart-secondary');
+  window.firebaseSecondaryAuth = getAuth(firebaseSecondaryApp);
+
+  // Explicit per-device (browserLocalPersistence) sessions. This is what
+  // makes the shared Teacher/Learner codes usable from unlimited different
+  // devices at the same time: each device's browser keeps its OWN signed-in
+  // session for teacher@ctsmart.educ / learner@ctsmart.educ in that
+  // device's local storage. Firebase Authentication has no server-side
+  // "single active session" limit for email/password sign-in, so one
+  // device signing in never signs another device out.
+  setPersistence(window.firebaseAuth,browserLocalPersistence).catch(err=>console.warn('Could not set auth persistence:',err));
+  // The secondary instance is only ever used briefly by the Founder to
+  // change a Teacher/Learner code, then signed out — it should never
+  // persist a session to browser storage.
+  setPersistence(window.firebaseSecondaryAuth,inMemoryPersistence).catch(err=>console.warn('Could not set secondary auth persistence:',err));
+
   window.firebaseApi = {
+    createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
-    httpsCallable
+    updatePassword,
+    reauthenticateWithCredential,
+    EmailAuthProvider,
+    getDoc,
+    setDoc,
+    doc,
+    serverTimestamp
   };
 </script>
 
@@ -91,31 +129,40 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 <div id="firstSetup" class="dashboard-panel" style="display:none">
   <div class="access-box">
     <h2>⚙️ CT-SMART EDUC — First-Time Setup</h2>
-    <p class="info">Create your own Founder, Teacher and shared Learner access codes. There are no built-in codes.</p>
+    <p class="info">Create your own Founder, Teacher and shared Learner access codes. The system runs on Firebase Spark without Cloud Functions.</p>
     <div class="notice">
-      <b>Important:</b> These codes will become the school's central access codes. You choose them yourself.
+      <b>Important:</b> Teacher and Learner codes must be exactly 6 characters (Firebase Authentication requires passwords of at least 6 characters). They are securely hashed in the browser before being stored in Firebase.
     </div>
 
-    <label>Founder Code</label>
-    <input id="setupFounderCode" type="password" autocomplete="new-password" placeholder="Create Founder code">
+    <label>Founder Code (exactly 6 characters)</label>
+    <input id="setupFounderCode" type="password" autocomplete="new-password" placeholder="6-character Founder code" maxlength="6" minlength="6">
 
     <label>Confirm Founder Code</label>
-    <input id="setupFounderConfirm" type="password" autocomplete="new-password" placeholder="Confirm Founder code">
+    <input id="setupFounderConfirm" type="password" autocomplete="new-password" placeholder="Confirm 6-character code" maxlength="6" minlength="6">
 
-    <label>Teacher Code</label>
-    <input id="setupTeacherCode" type="password" autocomplete="new-password" placeholder="Create Teacher code">
+    <label>Teacher Code (exactly 6 characters)</label>
+    <input id="setupTeacherCode" type="password" autocomplete="new-password" placeholder="6-character Teacher code" maxlength="6" minlength="6">
 
     <label>Confirm Teacher Code</label>
-    <input id="setupTeacherConfirm" type="password" autocomplete="new-password" placeholder="Confirm Teacher code">
+    <input id="setupTeacherConfirm" type="password" autocomplete="new-password" placeholder="Confirm Teacher code" maxlength="6" minlength="6">
 
-    <label>Shared Learner Code</label>
-    <input id="setupLearnerCode" type="password" autocomplete="new-password" placeholder="Create one code for all learners">
+    <label>Shared Learner Code (exactly 6 characters)</label>
+    <input id="setupLearnerCode" type="password" autocomplete="new-password" placeholder="Create one code for all learners" maxlength="6" minlength="6">
 
     <label>Confirm Learner Code</label>
-    <input id="setupLearnerConfirm" type="password" autocomplete="new-password" placeholder="Confirm Learner code">
+    <input id="setupLearnerConfirm" type="password" autocomplete="new-password" placeholder="Confirm Learner code" maxlength="6" minlength="6">
 
-    <button class="green wide" onclick="initializeSchool()">Save & Activate CT-SMART EDUC</button>
+    <button id="activateSystemBtn" class="green wide" type="button" onclick="initializeSchool()">Save & Activate CT-SMART EDUC</button>
     <p id="setupStatus" class="info" style="margin-top:12px;text-align:center"></p>
+  </div>
+</div>
+
+<div id="noNetworkPanel" class="dashboard-panel">
+  <div class="access-box" style="text-align:center">
+    <div style="font-size:2.6rem;margin-bottom:6px">📡</div>
+    <h2 style="margin-bottom:6px">No Network</h2>
+    <p class="info">Connect to the internet to access CT-SMART EDUC.</p>
+    <button class="blue wide" type="button" onclick="location.reload()">Retry</button>
   </div>
 </div>
 
@@ -128,10 +175,9 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
       <div class="dashboard-tile" onclick="openFounderAccess()">
         <div class="tile-icon">👑</div>
         <h2>Founder</h2>
-        <p>Secure management of Teacher and Learner access codes.</p>
+        <p>Secure management of Founder, Teacher and Learner access codes.</p>
       </div>
 
-      
       <div class="dashboard-tile" onclick="openTeacherAccess()">
         <div class="tile-icon">👨‍🏫</div>
         <h2>Teacher</h2>
@@ -143,12 +189,6 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
         <h2>Learner</h2>
         <p>Enter with the learner access code and join the live lesson.</p>
       </div>
-
-      <div class="dashboard-tile" onclick="openFounderAccess()">
-        <div class="tile-icon">👑</div>
-        <h2>Founder</h2>
-        <p>Manage access, security and teacher settings.</p>
-      </div>
     </div>
   </div>
 </div>
@@ -157,7 +197,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
   <div class="access-box">
     <button class="back-btn" onclick="backToDashboard()">← Back</button>
     <h2>🔐 Teacher Access</h2>
-    <p class="info">Enter the built-in teacher access code to continue to the teacher dashboard.</p>
+    <p class="info">Enter the current Teacher access code to continue to the teacher dashboard.</p>
     <label>Teacher Access Code</label>
     <input id="teacherAccessCode" type="password" placeholder="Enter access code">
     <button class="green wide" onclick="verifyTeacherAccess()">Proceed to Teacher Dashboard</button>
@@ -191,7 +231,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
   <div class="access-box">
     <button class="back-btn" onclick="backToDashboard()">← Back</button>
     <h2>👑 Founder Access</h2>
-    <p class="info">Enter the Founder access code configured for the secure Firebase Founder account.</p>
+    <p class="info">Enter the Founder access code for the Firebase Authentication Founder account.</p>
     <label>Founder Access Code</label>
     <input id="founderAccessCode" type="password" placeholder="Enter founder code">
     <button class="green wide" onclick="verifyFounderAccess()">Open Founder Panel</button>
@@ -202,17 +242,17 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
   <div class="card">
     <button class="back-btn" onclick="backToDashboard()">← Dashboard</button>
     <h2>👑 Founder Control Panel</h2>
-    <div class="notice"><b>Central access control:</b> Change the shared Teacher and Learner codes here. Changes apply to all devices after Firebase is updated.</div>
+    <div class="notice"><b>Central access control:</b> Change the shared Teacher and Learner codes here. Changes are saved to Firebase and apply to all devices.</div>
     <div class="notice" style="margin-bottom:18px">
       <b>Security control:</b><br>
-      <span class="info">Teacher, learner and founder accounts are authenticated centrally by Firebase Authentication. No anonymous accounts are created and access is not stored in browser localStorage.</span>
+      <span class="info">Founder identity is authenticated by Firebase Authentication. Teacher and Learner codes are the real Firebase Authentication passwords for two fixed system accounts — no anonymous accounts are ever created, and only the Founder account can view or change these codes (enforced by Firestore Security Rules). For Spark-plan operation, use long random codes.</span>
     </div>
 
     <h3>🔐 Teacher Access Code</h3>
     <label>Current Teacher Access Code</label>
-    <input id="currentTeacherCode" type="password" readonly>
-    <label>New Teacher Access Code</label>
-    <input id="newTeacherCode" type="password" placeholder="Enter a new code">
+    <input id="currentTeacherCode" type="text" readonly>
+    <label>New Teacher Access Code (exactly 6 characters)</label>
+    <input id="newTeacherCode" type="password" placeholder="6 characters" maxlength="6" minlength="6">
     <button id="saveBothAccessCodes" class="green wide" type="button" onclick="saveBothAccessCodes()">Save Teacher + Learner Codes Securely</button>
 
     <button class="blue wide" onclick="changeTeacherAccessCode()">Change Teacher Access Code</button>
@@ -221,10 +261,24 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 
     <h3>🎓 Learner Access Code</h3>
     <label>Current Learner Access Code</label>
-    <input id="currentLearnerCode" type="password" readonly>
-    <label>New Learner Access Code</label>
-    <input id="newLearnerCode" type="password" placeholder="Enter a new learner code">
+    <input id="currentLearnerCode" type="text" readonly>
+    <label>New Learner Access Code (exactly 6 characters)</label>
+    <input id="newLearnerCode" type="password" placeholder="6 characters" maxlength="6" minlength="6">
     <button class="blue wide" onclick="changeLearnerAccessCode()">Change Learner Access Code</button>
+
+    <hr style="border:0;border-top:1px solid var(--border);margin:24px 0">
+
+    <h3>👑 Founder Access Code</h3>
+    <div class="notice" style="margin-bottom:12px">
+      <span class="info">Changing your own Founder code requires your current code for verification. This updates the Firebase Authentication account used to sign in as Founder.</span>
+    </div>
+    <label>Current Founder Code</label>
+    <input id="currentFounderCodeInput" type="password" autocomplete="off" placeholder="Enter your current founder code" maxlength="6" minlength="6">
+    <label>New Founder Code (exactly 6 characters)</label>
+    <input id="newFounderCode" type="password" autocomplete="new-password" placeholder="Enter new founder code" maxlength="6" minlength="6">
+    <label>Confirm New Founder Code</label>
+    <input id="newFounderCodeConfirm" type="password" autocomplete="new-password" placeholder="Confirm new founder code" maxlength="6" minlength="6">
+    <button class="blue wide" onclick="changeFounderAccessCode()">Change Founder Access Code</button>
 
     <hr style="border:0;border-top:1px solid var(--border);margin:24px 0">
     <h3>🔒 User Access Locks</h3>
@@ -368,6 +422,7 @@ function connectGoogleMeet(){
 }
 function hideDashboards(){
   document.getElementById('firstSetup').style.display='none';
+  document.getElementById('noNetworkPanel').style.display='none';
   document.getElementById('dashboardChoice').style.display='none';
   document.getElementById('teacherAccess').style.display='none';
   document.getElementById('teacherDashboard').style.display='none';
@@ -382,103 +437,163 @@ function backToDashboard(){
 }
 
 /*
-  Firebase authentication:
-  - No anonymous Firebase accounts are created.
-  - There are no built-in school access codes.
-  - The first-time setup creates the school's Founder, Teacher and shared Learner codes.
-  - The secure Firebase backend stores the codes centrally.
-  - Learners share one school Learner code; teachers share one school Teacher code.
-  - The Founder code is used only for the Founder Panel.
+  FREE FIREBASE SPARK ACCESS SYSTEM
+
+  Security model:
+  - Firebase Cloud Functions are NOT used because the Spark plan does not deploy them.
+  - There are exactly three named Firebase Authentication accounts, ever:
+      founder@ctsmart.educ, teacher@ctsmart.educ, learner@ctsmart.educ
+    No anonymous Firebase Authentication accounts are ever created. Every
+    person who enters a valid code is signed in to one of these three fixed
+    accounts — never a new, one-off, anonymous session.
+  - A "code" IS that account's Firebase Authentication password. Entering the
+    correct code signs the browser in as that system account; Firebase itself
+    verifies the code, so no separate hashing/salting scheme is needed.
+  - Founder-only data (current Teacher/Learner codes, the Founder's UID) lives
+    in a Firestore document that only the Founder account may read or write,
+    enforced by Firestore Security Rules (see firestore.rules) — never by
+    client-side checks alone.
+  - Changing the Teacher or Learner code is done through a second, isolated
+    Firebase Auth instance (window.firebaseSecondaryAuth) so the Founder can
+    sign in as that system account and update its password without ever
+    disturbing the Founder's own primary session.
 */
-const SYSTEM_EMAIL_DOMAIN='ctsmart.educ';
 const GOOGLE_MEET_LINK='https://meet.google.com/ipj-aihy-oou';
+const FOUNDER_EMAIL='founder@ctsmart.educ';
+// Fixed, named Firebase Authentication accounts shared by every Teacher and
+// every Learner respectively. A person's "code" is this account's password.
+const SYSTEM_ROLE_IDENTITIES = {
+  teacher:{email:'teacher@ctsmart.educ',linkId:'teacher'},
+  learner:{email:'learner@ctsmart.educ',linkId:'learner'}
+};
+const MIN_SHARED_CODE_LENGTH=6;
+const MAX_SHARED_CODE_LENGTH=6;
+// These are computed lazily (as functions, not top-level consts) so that
+// a slow-loading Firebase module script (type="module", fetched over the
+// network) can never crash this classic <script> block before it finishes
+// running. If window.firebaseApi/firebaseDb weren't ready yet, computing
+// these eagerly at parse time would throw and leave everything below
+// (like MIN_SHARED_CODE_LENGTH) permanently uninitialized.
+function getPublicAccessDoc(){
+  return window.firebaseApi.doc(window.firebaseDb,'schoolAccess','public');
+}
+function getAdminAccessDoc(){
+  return window.firebaseApi.doc(window.firebaseDb,'schoolAccess','admin');
+}
 
 function normalizeCode(code){
   return (code||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'');
 }
 
-function systemEmail(role,code){
-  return role.toLowerCase()+'.'+normalizeCode(code).toLowerCase()+'@'+SYSTEM_EMAIL_DOMAIN;
+function validateFounderCode(code){
+  return (code||'').trim();
 }
 
-async function callFunction(name,data){
-  const fn=window.firebaseApi.httpsCallable(window.firebaseFunctions,name);
-  const result=await fn(data||{});
-  return result.data;
-}
-
-async function authenticateWithCode(role,code){
+function validateSharedCode(code,label){
   const clean=normalizeCode(code);
-  if(!clean) throw new Error('Please enter an access code.');
+  if(clean.length!==MIN_SHARED_CODE_LENGTH){
+    throw new Error(`${label} must be exactly ${MIN_SHARED_CODE_LENGTH} characters.`);
+  }
+  return clean;
+}
 
+function isFounder(){
+  const user=window.firebaseAuth.currentUser;
+  // Founder identity is proven by Firebase Authentication sign-in as the
+  // fixed FOUNDER_EMAIL account. There is no email-verification flow for
+  // this internal address, so emailVerified is intentionally not checked
+  // here — the real access boundary is enforced by Firestore Security
+  // Rules (see firestore.rules), which check request.auth.token.email.
+  return !!user && user.email===FOUNDER_EMAIL;
+}
+
+async function readPublicAccess(){
+  const snap=await window.firebaseApi.getDoc(getPublicAccessDoc());
+  if(!snap.exists()) return null;
+  return snap.data();
+}
+
+async function readAdminAccess(){
+  if(!isFounder()) throw new Error('Founder authentication is required.');
+  const snap=await window.firebaseApi.getDoc(getAdminAccessDoc());
+  if(!snap.exists()) return null;
+  return snap.data();
+}
+
+async function verifySharedCode(role,code){
+  const clean=validateSharedCode(code,role==='teacher'?'Teacher access code':'Learner access code');
+  const data=await readPublicAccess();
+  if(!data || !data.configured) throw new Error('School access has not been configured.');
+
+  if(role==='teacher' && data.teacherLocked) throw new Error('Teacher access is currently locked.');
+  if(role==='learner' && data.learnerLocked) throw new Error('Learner access is currently locked.');
+
+  const identity=SYSTEM_ROLE_IDENTITIES[role];
   try{
-    const call=window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'verifySharedAccessCode'
+    // The code IS this system account's Firebase Authentication password.
+    // Signing in here both verifies the code and attaches the person to the
+    // real, fixed system account — never an anonymous session.
+    const credential=await window.firebaseApi.signInWithEmailAndPassword(
+      window.firebaseAuth, identity.email, clean
     );
-    const result=await call({role,code:clean});
-    if(result.data && result.data.ok) return result.data;
-    throw new Error('Access denied.');
+    return {ok:true,role,uid:credential.user.uid};
   }catch(err){
-    console.error(err);
-    const message=err?.message || 'Unable to verify access code.';
-    throw new Error(message);
+    if(err?.code==='auth/wrong-password' || err?.code==='auth/invalid-credential' || err?.code==='auth/invalid-login-credentials'){
+      throw new Error('Incorrect access code.');
+    }
+    if(err?.code==='auth/user-not-found'){
+      throw new Error('School access has not been fully configured yet.');
+    }
+    throw new Error(err?.message || 'Unable to verify access code.');
   }
 }
 
-const FOUNDER_EMAIL='founder@ctsmart.educ';
-
-async function saveAccessSettings(){
-  const call=window.firebaseApi.httpsCallable(
-    window.firebaseFunctions,'setSchoolAccessCodes'
-  );
-  return call({
-    learnerCode:accessSettings.learnerCode,
-    teacherCode:accessSettings.teacherCode
-  });
-}
-
 let accessSettings={
-  learnerCode:'',
-  teacherCode:'',
   learnerLocked:false,
-  teacherLocked:false
+  teacherLocked:false,
+  configured:false
 };
 
 async function loadAccessSettings(){
   try{
-    const call=window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'getSchoolAccessSettings'
-    );
-    const result=await call({});
-    const d=result.data || {};
-    accessSettings.configured=!!d.configured;
-    accessSettings.learnerLocked=!!d.learnerLocked;
-    accessSettings.teacherLocked=!!d.teacherLocked;
-    accessSettings.learnerCodeMasked=d.learnerCodeMasked || '';
-    accessSettings.teacherCodeMasked=d.teacherCodeMasked || '';
+    const data=await readPublicAccess();
+    accessSettings.configured=!!(data&&data.configured);
+    accessSettings.learnerLocked=!!(data&&data.learnerLocked);
+    accessSettings.teacherLocked=!!(data&&data.teacherLocked);
   }catch(err){
-    console.error('Could not load secure access settings:',err);
+    console.error('Could not load access settings:',err);
   }
   return accessSettings;
 }
 
-function getConfiguredCode(role){ return accessSettings[role+'Code'] || ''; }
-
 async function initializeSchool(){
-  const founder=normalizeCode(document.getElementById('setupFounderCode').value);
-  const founderConfirm=normalizeCode(document.getElementById('setupFounderConfirm').value);
-  const teacher=normalizeCode(document.getElementById('setupTeacherCode').value);
-  const teacherConfirm=normalizeCode(document.getElementById('setupTeacherConfirm').value);
-  const learner=normalizeCode(document.getElementById('setupLearnerCode').value);
-  const learnerConfirm=normalizeCode(document.getElementById('setupLearnerConfirm').value);
   const status=document.getElementById('setupStatus');
+  const button=document.getElementById('activateSystemBtn');
 
-  if(founder.length<4 || teacher.length<4 || learner.length<4){
-    status.textContent='Each code must contain at least 4 characters.';
+  const founder=validateFounderCode(document.getElementById('setupFounderCode').value);
+  const founderConfirm=validateFounderCode(document.getElementById('setupFounderConfirm').value);
+  let teacher,teacherConfirm,learner,learnerConfirm;
+  try{
+    teacher=validateSharedCode(document.getElementById('setupTeacherCode').value,'Teacher code');
+    teacherConfirm=validateSharedCode(document.getElementById('setupTeacherConfirm').value,'Teacher code');
+    learner=validateSharedCode(document.getElementById('setupLearnerCode').value,'Learner code');
+    learnerConfirm=validateSharedCode(document.getElementById('setupLearnerConfirm').value,'Learner code');
+  }catch(err){
+    status.textContent=err.message;
     return;
   }
-  if(founder!==founderConfirm || teacher!==teacherConfirm || learner!==learnerConfirm){
-    status.textContent='The confirmation codes do not match.';
+
+  if(founder.length!==6){ status.textContent='Founder code must be exactly 6 characters.'; return; }
+  if(founder!==founderConfirm){
+    status.textContent='Founder code and confirmation do not match.';
+    return;
+  }
+  if(teacher!==teacherConfirm){
+    status.textContent='Teacher code and confirmation do not match.';
+    return;
+  }
+  if(learner!==learnerConfirm){
+    status.textContent='Learner code and confirmation do not match.';
     return;
   }
   if(new Set([founder,teacher,learner]).size<3){
@@ -486,25 +601,150 @@ async function initializeSchool(){
     return;
   }
 
-  status.textContent='Activating the system securely...';
+  button.disabled=true;
+  button.textContent='Saving securely...';
+  status.textContent='Connecting to Firebase Authentication...';
+
   try{
-    const call=window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'initializeSchoolAccess'
-    );
-    await call({founderCode:founder,teacherCode:teacher,learnerCode:learner});
-    status.textContent='System activated successfully.';
+    // GATE: re-confirm directly against Firebase, at the moment of
+    // activation, that the system is not already configured. This is the
+    // authoritative check — it does not rely on whatever state got this
+    // screen displayed, so first-time setup can never be re-run just
+    // because the setup panel happened to be visible (e.g. from a stale
+    // page, a bookmarked URL, or a failed initial connectivity check).
+    // Once configured, changing codes is only possible from the Founder
+    // dashboard, authenticated as the Founder.
+    const alreadyConfigured=await readPublicAccess();
+    if(alreadyConfigured?.configured){
+      status.textContent='❌ CT-SMART EDUC is already activated. Only the Founder can change codes, from the Founder Dashboard.';
+      button.disabled=false;
+      button.textContent='Save & Activate CT-SMART EDUC';
+      hideDashboards();
+      document.getElementById('dashboardChoice').style.display='block';
+      return;
+    }
+
+    // 1) Create (or verify) the real Founder Firebase Authentication account
+    //    on the PRIMARY auth instance — this becomes the active session.
+    let credential;
+    try{
+      credential=await window.firebaseApi.createUserWithEmailAndPassword(
+        window.firebaseAuth, FOUNDER_EMAIL, founder
+      );
+    }catch(err){
+      if(err.code==='auth/email-already-in-use'){
+        status.textContent='Founder account already exists. Verifying Founder code...';
+        credential=await window.firebaseApi.signInWithEmailAndPassword(
+          window.firebaseAuth, FOUNDER_EMAIL, founder
+        );
+      }else{
+        throw err;
+      }
+    }
+
+    const user=credential.user;
+    if(!user || user.email!==FOUNDER_EMAIL){
+      throw new Error('Founder authentication could not be verified.');
+    }
+
+    status.textContent='Founder verified. Creating Teacher and Learner accounts...';
+
+    const existingAdmin=await (async()=>{
+      const snap=await window.firebaseApi.getDoc(getAdminAccessDoc());
+      return snap.exists()?snap.data():null;
+    })();
+
+    if(existingAdmin?.configured && existingAdmin.founderUid!==user.uid){
+      throw new Error('This CT-SMART system is already configured by another Founder account.');
+    }
+
+    // 2) Create the Teacher and Learner system accounts on the SECONDARY
+    //    auth instance, so this never disturbs the Founder session that is
+    //    now active on the primary auth instance above. Every Teacher and
+    //    every Learner will sign in to these same two fixed accounts —
+    //    no anonymous accounts are ever created.
+    await createOrClaimSystemAccount('teacher',teacher);
+    await createOrClaimSystemAccount('learner',learner);
+    await window.firebaseApi.signOut(window.firebaseSecondaryAuth);
+
+    status.textContent='Accounts ready. Saving settings...';
+
+    await window.firebaseApi.setDoc(getAdminAccessDoc(),{
+      configured:true,
+      founderUid:user.uid,
+      founderEmail:FOUNDER_EMAIL,
+      teacherCode:teacher,
+      learnerCode:learner,
+      updatedAt:window.firebaseApi.serverTimestamp(),
+      initializedAt:existingAdmin?.initializedAt || window.firebaseApi.serverTimestamp()
+    },{merge:true});
+
+    await window.firebaseApi.setDoc(getPublicAccessDoc(),{
+      configured:true,
+      teacherAccount:SYSTEM_ROLE_IDENTITIES.teacher,
+      learnerAccount:SYSTEM_ROLE_IDENTITIES.learner,
+      teacherLocked:false,
+      learnerLocked:false,
+      updatedAt:window.firebaseApi.serverTimestamp()
+    },{merge:true});
+
     accessSettings.configured=true;
-    accessSettings.learnerCode=learner;
-    accessSettings.teacherCode=teacher;
-    hideDashboards();
-    document.getElementById('dashboardChoice').style.display='block';
+    accessSettings.teacherLocked=false;
+    accessSettings.learnerLocked=false;
+
+    status.textContent='✅ CT-SMART EDUC is activated. Codes are saved in Firebase for all devices.';
+    button.textContent='Activated ✓';
+
+    document.getElementById('setupFounderCode').value='';
+    document.getElementById('setupFounderConfirm').value='';
+    document.getElementById('setupTeacherCode').value='';
+    document.getElementById('setupTeacherConfirm').value='';
+    document.getElementById('setupLearnerCode').value='';
+    document.getElementById('setupLearnerConfirm').value='';
+
+    setTimeout(()=>{
+      hideDashboards();
+      document.getElementById('dashboardChoice').style.display='block';
+      button.disabled=false;
+      button.textContent='Save & Activate CT-SMART EDUC';
+    },900);
+
   }catch(err){
-    console.error('Initial setup failed:',err);
-    status.textContent=err?.message || 'Initial setup failed.';
-    alert(
-      'The system could not complete first-time setup. '+
-      'Make sure the secure Firebase initializeSchoolAccess Cloud Function is deployed.'
+    console.error('CT-SMART activation error:',err);
+    if(isNetworkError(err)){
+      status.textContent=networkErrorMessage();
+      button.disabled=false;
+      button.textContent='Save & Activate CT-SMART EDUC';
+      return;
+    }
+    const code=err?.code ? ` (${err.code})` : '';
+    const message=err?.message || 'Activation failed.';
+    status.textContent=`❌ ${message}${code}`;
+    alert(`CT-SMART could not be activated.\n\n${message}${code}\n\nCheck Firebase Authentication and Firestore Rules.`);
+    button.disabled=false;
+    button.textContent='Save & Activate CT-SMART EDUC';
+  }
+}
+window.initializeSchool=initializeSchool;
+
+// Creates the fixed Teacher/Learner system account with the given code as
+// its password, using the SECONDARY (isolated) Firebase Auth instance. If
+// the account already exists (e.g. a retried setup), it is claimed by
+// signing in with the supplied code rather than being recreated.
+async function createOrClaimSystemAccount(role,code){
+  const identity=SYSTEM_ROLE_IDENTITIES[role];
+  try{
+    await window.firebaseApi.createUserWithEmailAndPassword(
+      window.firebaseSecondaryAuth, identity.email, code
     );
+  }catch(err){
+    if(err.code==='auth/email-already-in-use'){
+      await window.firebaseApi.signInWithEmailAndPassword(
+        window.firebaseSecondaryAuth, identity.email, code
+      );
+    }else{
+      throw err;
+    }
   }
 }
 
@@ -532,126 +772,198 @@ function openFounderAccess(){
   setTimeout(()=>document.getElementById('founderAccessCode').focus(),50);
 }
 
+function isNetworkError(err){
+  return err?.code==='auth/network-request-failed' || err?.code==='unavailable' || !navigator.onLine;
+}
+function networkErrorMessage(){
+  return '📡 No Network. Connect to the internet to access CT-SMART EDUC.';
+}
+
 async function verifyTeacherAccess(){
   try{
-    await authenticateWithCode('teacher',document.getElementById('teacherAccessCode').value);
+    await verifySharedCode('teacher',document.getElementById('teacherAccessCode').value);
     hideDashboards();
     document.getElementById('teacherDashboard').style.display='block';
-  }catch(err){
-    alert(err.message);
-  }
+  }catch(err){ alert(isNetworkError(err)?networkErrorMessage():err.message); }
 }
 
 async function verifyFounderAccess(){
-  const code=document.getElementById('founderAccessCode').value;
+  const code=validateFounderCode(document.getElementById('founderAccessCode').value);
   try{
-    await signInFounder(code);
+    await window.firebaseApi.signInWithEmailAndPassword(
+      window.firebaseAuth,FOUNDER_EMAIL,code
+    );
     hideDashboards();
     document.getElementById('founderDashboard').style.display='block';
-    loadFounderSettings();
+    await loadFounderSettings();
   }catch(err){
-    alert(err.message || 'Founder authentication failed.');
+    console.error(err);
+    if(isNetworkError(err)){ alert(networkErrorMessage()); return; }
+    alert('Incorrect Founder access code or Founder account is not configured.');
   }
-}
-
-async function signInFounder(code){
-  const clean=normalizeCode(code);
-  if(!clean) throw new Error('Please enter the Founder access code.');
-  const call=window.firebaseApi.httpsCallable(
-    window.firebaseFunctions,'verifyFounderAccess'
-  );
-  const result=await call({code:clean});
-  if(!result.data || !result.data.ok) throw new Error('Incorrect Founder access code.');
-  return result.data;
 }
 
 async function authenticateLearner(){
   const code=document.getElementById('learnerAccessCode').value;
   try{
-    const user=await authenticateWithCode('learner',code);
+    const user=await verifySharedCode('learner',code);
     document.getElementById('learnerDashboard').dataset.authenticated='true';
     document.getElementById('learnerDashboard').dataset.userUid=user.uid;
     document.getElementById('learnerName').value=
-      user.displayName || document.getElementById('learnerName').value || '';
-    alert('Learner account recognized. You may now join the lesson.');
+      document.getElementById('learnerName').value || '';
+    alert('Learner access code recognized. You may now join the lesson.');
     return true;
   }catch(err){
     document.getElementById('learnerDashboard').dataset.authenticated='false';
-    alert(err.message);
+    alert(isNetworkError(err)?networkErrorMessage():err.message);
     return false;
   }
 }
 
 async function loadFounderSettings(){
-  await loadAccessSettings();
-  document.getElementById('currentTeacherCode').value=accessSettings.teacherCodeMasked || 'Not configured';
-  document.getElementById('currentLearnerCode').value=accessSettings.learnerCodeMasked || 'Not configured';
-  document.getElementById('newTeacherCode').value='';
-  document.getElementById('newLearnerCode').value='';
-  document.getElementById('lockTeacher').checked=!!accessSettings.teacherLocked;
-  document.getElementById('lockLearner').checked=!!accessSettings.learnerLocked;
+  try{
+    const data=await readAdminAccess();
+    const pub=await readPublicAccess();
+    if(!data || !data.configured || data.founderUid!==window.firebaseAuth.currentUser.uid){
+      throw new Error('Founder authorization failed.');
+    }
+    // Only the Founder can read this document (enforced by Firestore Rules),
+    // so it's safe to show the real, current codes here for reference.
+    document.getElementById('currentTeacherCode').value=data.teacherCode || '(unknown — use Reset below)';
+    document.getElementById('currentLearnerCode').value=data.learnerCode || '(unknown — use Reset below)';
+    document.getElementById('newTeacherCode').value='';
+    document.getElementById('newLearnerCode').value='';
+    document.getElementById('lockTeacher').checked=!!pub?.teacherLocked;
+    document.getElementById('lockLearner').checked=!!pub?.learnerLocked;
+    accessSettings.teacherLocked=!!pub?.teacherLocked;
+    accessSettings.learnerLocked=!!pub?.learnerLocked;
+  }catch(err){
+    alert(err.message);
+  }
+}
+
+// Changes a Teacher or Learner system account's code (its Firebase Auth
+// password). Uses the SECONDARY auth instance to sign in as that account
+// with its current code, update the password, then sign back out — all
+// without ever touching the Founder's own primary session.
+async function changeSystemAccountCode(role,newCode){
+  const identity=SYSTEM_ROLE_IDENTITIES[role];
+  const founderData=await readAdminAccess();
+  if(!founderData || founderData.founderUid!==window.firebaseAuth.currentUser.uid){
+    throw new Error('Founder authentication is required.');
+  }
+  const currentCode=role==='teacher'?founderData.teacherCode:founderData.learnerCode;
+  if(!currentCode){
+    throw new Error(`The current ${role} code is not on record. Use the account's original code, or recreate it from a fresh Founder setup.`);
+  }
+  if(newCode===currentCode){
+    throw new Error(`New ${role} code must be different from the current code.`);
+  }
+
+  await window.firebaseApi.signInWithEmailAndPassword(window.firebaseSecondaryAuth,identity.email,currentCode);
+  await window.firebaseApi.updatePassword(window.firebaseSecondaryAuth.currentUser,newCode);
+  await window.firebaseApi.signOut(window.firebaseSecondaryAuth);
+
+  const patch=role==='teacher'?{teacherCode:newCode}:{learnerCode:newCode};
+  await window.firebaseApi.setDoc(getAdminAccessDoc(),{
+    ...founderData,
+    ...patch,
+    updatedAt:window.firebaseApi.serverTimestamp()
+  },{merge:true});
+
+  const pub=await readPublicAccess();
+  await window.firebaseApi.setDoc(getPublicAccessDoc(),{
+    ...pub,
+    updatedAt:window.firebaseApi.serverTimestamp()
+  },{merge:true});
 }
 
 async function saveBothAccessCodes(){
-  const teacher=normalizeCode(document.getElementById('newTeacherCode').value);
-  const learner=normalizeCode(document.getElementById('newLearnerCode').value);
-  if(teacher.length<4 || learner.length<4){
-    alert('Enter both a Teacher code and a Learner code, each at least 4 characters.');
-    return;
-  }
+  const teacher=validateSharedCode(document.getElementById('newTeacherCode').value,'Teacher access code');
+  const learner=validateSharedCode(document.getElementById('newLearnerCode').value,'Learner access code');
+  if(teacher===learner){ alert('Teacher and Learner codes must be different.'); return; }
   try{
-    const call=window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'setSchoolAccessCodes'
-    );
-    await call({teacherCode:teacher,learnerCode:learner});
+    await changeSystemAccountCode('teacher',teacher);
+    await changeSystemAccountCode('learner',learner);
     document.getElementById('newTeacherCode').value='';
     document.getElementById('newLearnerCode').value='';
-    await loadAccessSettings();
-    document.getElementById('currentTeacherCode').value=accessSettings.teacherCodeMasked || 'Configured';
-    document.getElementById('currentLearnerCode').value=accessSettings.learnerCodeMasked || 'Configured';
-    alert('Teacher and Learner access codes have been updated securely.');
-  }catch(err){
-    alert(err?.message || 'Unable to update access codes.');
-  }
+    await loadFounderSettings();
+    alert('Teacher and Learner codes have been updated for all devices.');
+  }catch(err){ alert(err?.message || 'Unable to update access codes.'); }
 }
 
 async function changeTeacherAccessCode(){
-  const newCode=normalizeCode(document.getElementById('newTeacherCode').value);
-  if(newCode.length<4){ alert('Teacher access code must contain at least 4 characters.'); return; }
+  const newCode=validateSharedCode(document.getElementById('newTeacherCode').value,'Teacher access code');
   try{
-    const call=window.firebaseApi.httpsCallable(window.firebaseFunctions,'setTeacherAccessCode');
-    await call({teacherCode:newCode});
+    await changeSystemAccountCode('teacher',newCode);
     document.getElementById('newTeacherCode').value='';
     await loadFounderSettings();
-    alert('Teacher access code updated securely in Firebase.');
+    alert('Teacher access code updated.');
   }catch(err){ alert(err?.message || 'Unable to update the teacher code.'); }
 }
 
 async function changeLearnerAccessCode(){
-  const newCode=normalizeCode(document.getElementById('newLearnerCode').value);
-  if(newCode.length<4){ alert('Learner access code must contain at least 4 characters.'); return; }
+  const newCode=validateSharedCode(document.getElementById('newLearnerCode').value,'Learner access code');
   try{
-    const call=window.firebaseApi.httpsCallable(window.firebaseFunctions,'setLearnerAccessCode');
-    await call({learnerCode:newCode});
+    await changeSystemAccountCode('learner',newCode);
     document.getElementById('newLearnerCode').value='';
     await loadFounderSettings();
-    alert('Learner access code updated securely in Firebase.');
+    alert('Learner access code updated.');
   }catch(err){ alert(err?.message || 'Unable to update the learner code.'); }
 }
-async function saveLocks(){
-  const learnerLocked=document.getElementById('lockLearner').checked;
-  const teacherLocked=document.getElementById('lockTeacher').checked;
+
+async function changeFounderAccessCode(){
+  const currentCode=validateFounderCode(document.getElementById('currentFounderCodeInput').value);
+  const newCode=validateFounderCode(document.getElementById('newFounderCode').value);
+  const confirmCode=validateFounderCode(document.getElementById('newFounderCodeConfirm').value);
+
+  if(currentCode.length!==6){ alert('Please enter your current 6-character Founder code.'); return; }
+  if(newCode.length!==6){ alert('New Founder code must be exactly 6 characters.'); return; }
+  if(newCode!==confirmCode){ alert('New Founder code and confirmation do not match.'); return; }
+  if(newCode===currentCode){ alert('New Founder code must be different from the current code.'); return; }
+
   try{
-    const call=window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'setSchoolAccessLocks'
-    );
-    await call({learnerLocked,teacherLocked});
-    accessSettings.learnerLocked=learnerLocked;
-    accessSettings.teacherLocked=teacherLocked;
-    alert('Access lock settings saved securely in Firebase.');
+    const user=window.firebaseAuth.currentUser;
+    if(!user || user.email!==FOUNDER_EMAIL){
+      throw new Error('Founder authentication is required.');
+    }
+    // Re-authenticate with the current code before allowing a password change,
+    // since Firebase requires a recent sign-in for sensitive account updates.
+    const credential=window.firebaseApi.EmailAuthProvider.credential(FOUNDER_EMAIL,currentCode);
+    await window.firebaseApi.reauthenticateWithCredential(user,credential);
+    await window.firebaseApi.updatePassword(user,newCode);
+
+    document.getElementById('currentFounderCodeInput').value='';
+    document.getElementById('newFounderCode').value='';
+    document.getElementById('newFounderCodeConfirm').value='';
+    alert('Founder access code updated. Use the new code next time you sign in as Founder.');
   }catch(err){
-    alert(err?.message || 'Unable to save access lock settings.');
+    console.error('Founder code change error:',err);
+    if(err?.code==='auth/wrong-password' || err?.code==='auth/invalid-credential'){
+      alert('Your current Founder code was incorrect. Please try again.');
+    }else{
+      alert(err?.message || 'Unable to update the Founder access code.');
+    }
   }
+}
+
+async function saveLocks(){
+  try{
+    const founderData=await readAdminAccess();
+    if(!founderData || founderData.founderUid!==window.firebaseAuth.currentUser.uid){
+      throw new Error('Founder authentication is required.');
+    }
+    const pub=await readPublicAccess();
+    await window.firebaseApi.setDoc(getPublicAccessDoc(),{
+      ...pub,
+      teacherLocked:document.getElementById('lockTeacher').checked,
+      learnerLocked:document.getElementById('lockLearner').checked,
+      updatedAt:window.firebaseApi.serverTimestamp()
+    });
+    accessSettings.learnerLocked=document.getElementById('lockLearner').checked;
+    accessSettings.teacherLocked=document.getElementById('lockTeacher').checked;
+    alert('Access lock settings saved in Firebase.');
+  }catch(err){ alert(err?.message || 'Unable to save access lock settings.'); }
 }
 async function lockAllUsers(){
   document.getElementById('lockTeacher').checked=true;
@@ -698,7 +1010,6 @@ function startTeacherLesson(){
   isTeacher=true;
   document.getElementById('teacherWaitingPanel').style.display='block';
   showMeeting(code,document.getElementById('lessonTitle').value.trim()||'Google Meet Live Lesson');
-  createApi(code,name,true);
 }
 function toggleJoinButton(){
   const accepted=document.getElementById('rulesAccepted').checked;
@@ -727,39 +1038,43 @@ function startLearnerLesson(){
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 </script>
 <script>
-
-
 window.addEventListener('load',async()=>{
   hideDashboards();
-  let configured=false;
+  // SECURITY DEFAULT: the setup screen must be shown ONLY when we
+  // positively confirm, via a successful read from Firebase, that the
+  // system is unconfigured. If that read fails for ANY reason (no network,
+  // Firebase unreachable, etc.), we never guess — we show a plain "No
+  // Network" screen and stop, since guessing wrong in either direction is
+  // unsafe: showing the setup screen again would let anyone reset the
+  // codes, and showing the normal dashboard would let people try (and
+  // fail) to use features that need that same connection anyway.
+  let configured=null;
   try{
-    const result=await window.firebaseApi.httpsCallable(
-      window.firebaseFunctions,'getSchoolAccessSettings'
-    )({});
-    configured=!!(result.data && result.data.configured);
-    if(result.data){
-      accessSettings.configured=configured;
-      accessSettings.learnerLocked=!!result.data.learnerLocked;
-      accessSettings.teacherLocked=!!result.data.teacherLocked;
-    }
+    const data=await readPublicAccess();
+    configured=!!(data&&data.configured);
+    accessSettings.configured=configured;
+    accessSettings.teacherLocked=!!data?.teacherLocked;
+    accessSettings.learnerLocked=!!data?.learnerLocked;
   }catch(err){
-    console.warn('Could not determine first-time setup status:',err);
+    console.warn('Could not reach the server to determine setup status:',err);
+    configured=null;
   }
 
-  if(configured){
+  if(configured===null){
+    document.getElementById('noNetworkPanel').style.display='block';
+    return;
+  }else if(configured){
     document.getElementById('dashboardChoice').style.display='block';
   }else{
     document.getElementById('firstSetup').style.display='block';
   }
 
-  if(window.firebaseApi && window.firebaseApi.onAuthStateChanged){
-    window.firebaseApi.onAuthStateChanged(window.firebaseAuth,(user)=>{
-      if(!user){
-        const panel=document.getElementById('learnerDashboard');
-        if(panel) panel.dataset.authenticated='false';
-      }
-    });
-  }
+  window.firebaseApi.onAuthStateChanged(window.firebaseAuth,(user)=>{
+    if(!user){
+      const panel=document.getElementById('learnerDashboard');
+      if(panel) panel.dataset.authenticated='false';
+    }
+  });
 });
 </script>
 <script>
