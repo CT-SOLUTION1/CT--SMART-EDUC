@@ -71,7 +71,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
       <div class="dashboard-tile" onclick="openLearnerDashboard()">
         <div class="tile-icon">🎓</div>
         <h2>Learner</h2>
-        <p>Join the live Google Meet lesson.</p>
+        <p>Enter with the learner access code and join the live lesson.</p>
       </div>
 
       <div class="dashboard-tile" onclick="openFounderAccess()">
@@ -134,7 +134,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
     <h2>👑 Founder Control Panel</h2>
     <div class="notice" style="margin-bottom:18px">
       <b>Security control:</b><br>
-      <span class="info">These controls are stored in this browser. A true server-wide lock or centrally shared access code requires a backend/database.</span>
+      <span class="info">Teacher and learner access codes are stored in this browser. The default learner code is <b>MATH</b>, and the founder can change it at any time. A true server-wide access code requires a backend/database.</span>
     </div>
 
     <h3>🔐 Teacher Access Code</h3>
@@ -143,6 +143,15 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
     <label>New Teacher Access Code</label>
     <input id="newTeacherCode" type="password" placeholder="Enter a new code">
     <button class="blue wide" onclick="changeTeacherAccessCode()">Change Teacher Access Code</button>
+
+    <hr style="border:0;border-top:1px solid var(--border);margin:24px 0">
+
+    <h3>🎓 Learner Access Code</h3>
+    <label>Current Learner Access Code</label>
+    <input id="currentLearnerCode" type="password" readonly>
+    <label>New Learner Access Code</label>
+    <input id="newLearnerCode" type="password" placeholder="Enter a new learner code">
+    <button class="blue wide" onclick="changeLearnerAccessCode()">Change Learner Access Code</button>
 
     <hr style="border:0;border-top:1px solid var(--border);margin:24px 0">
     <h3>🔒 User Access Locks</h3>
@@ -163,6 +172,10 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
   <div class="card">
     <button class="back-btn" onclick="backToDashboard()">← Back</button>
     <h2>🎓 Learner Dashboard: Join Lesson</h2>
+    <div class="notice" style="margin-bottom:18px">
+      <b>🔐 Learner Access</b><br>
+      <span class="info">Enter the learner access code from the CT-SMART EDUC administrator/founder before accessing this lesson area.</span>
+    </div>
     <div style="padding:16px;margin:0 0 18px;border-radius:10px;background:#fff0f0;border:2px solid var(--danger);color:#a51f1f;font-weight:900;text-align:center;line-height:1.5;text-transform:uppercase">
       ⚠️ IMPORTANT WARNING: ONLY LEARNERS WHOSE NAMES ARE RECOGNIZED SHALL BE ACCEPTED TO JOIN THE LESSON.
     </div>
@@ -311,7 +324,12 @@ function backToDashboard(){
 }
 
 const DEFAULT_TEACHER_ACCESS_CODE='EDUC';
+const DEFAULT_LEARNER_ACCESS_CODE='MATH';
 const LUCK_ACCESS_CODE='LUCK';
+
+function getLearnerAccessCode(){
+  return localStorage.getItem('ctsmart_learner_access_code') || DEFAULT_LEARNER_ACCESS_CODE;
+}
 
 function getTeacherAccessCode(){
   return localStorage.getItem('ctsmart_teacher_access_code') || DEFAULT_TEACHER_ACCESS_CODE;
@@ -342,6 +360,15 @@ function verifyTeacherAccess(){
 
 function openLearnerDashboard(){
   if(isLocked('learner')){ alert('Learner access is currently locked by the founder.'); return; }
+
+  const code=prompt('Enter Learner Access Code:');
+  if(code===null) return;
+
+  if(code.trim().toUpperCase()!==getLearnerAccessCode().toUpperCase()){
+    alert('Incorrect learner access code. Please enter the correct code.');
+    return;
+  }
+
   hideDashboards();
   document.getElementById('learnerDashboard').style.display='block';
 }
@@ -367,6 +394,8 @@ function verifyFounderAccess(){
 function loadFounderSettings(){
   document.getElementById('currentTeacherCode').value=getTeacherAccessCode();
   document.getElementById('newTeacherCode').value='';
+  document.getElementById('currentLearnerCode').value=getLearnerAccessCode();
+  document.getElementById('newLearnerCode').value='';
   document.getElementById('lockTeacher').checked=isLocked('teacher');
   document.getElementById('lockLearner').checked=isLocked('learner');
 }
@@ -378,6 +407,15 @@ function changeTeacherAccessCode(){
   document.getElementById('currentTeacherCode').value=newCode;
   document.getElementById('newTeacherCode').value='';
   alert('Teacher access code changed successfully.');
+}
+
+function changeLearnerAccessCode(){
+  const newCode=document.getElementById('newLearnerCode').value.trim();
+  if(newCode.length<4){ alert('Learner access code must contain at least 4 characters.'); return; }
+  localStorage.setItem('ctsmart_learner_access_code',newCode);
+  document.getElementById('currentLearnerCode').value=newCode;
+  document.getElementById('newLearnerCode').value='';
+  alert('Learner access code changed successfully.');
 }
 
 function saveLocks(){
