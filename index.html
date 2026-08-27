@@ -40,7 +40,33 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 @media(max-width:600px){.dashboard-choice{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dashboard-tile{padding:16px 8px}.dashboard-tile .tile-icon{font-size:2rem}.dashboard-tile h2{font-size:1.05rem}.dashboard-tile p{font-size:.78rem}}
 @media(max-width:900px){.grid,.meeting-layout{grid-template-columns:1fr}.meeting{height:520px}.waiting{order:-1}}
 </style>
-<script src="https://meet.jit.si/external_api.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAazmoaEKQzdF9rXh7rPDNocml6lduhcB4",
+    authDomain: "ct-e-school-solutions.firebaseapp.com",
+    projectId: "ct-e-school-solutions",
+    storageBucket: "ct-e-school-solutions.firebasestorage.app",
+    messagingSenderId: "710981788315",
+    appId: "1:710981788315:web:d6c159734aa3cca3791c3e"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  window.firebaseAuth = getAuth(firebaseApp);
+  window.firebaseApi = {
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+  };
+</script>
+
 </head>
 <body>
 <header>
@@ -134,7 +160,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
     <h2>👑 Founder Control Panel</h2>
     <div class="notice" style="margin-bottom:18px">
       <b>Security control:</b><br>
-      <span class="info">Teacher and learner access codes are stored in this browser. The default learner code is <b>MATH</b>, and the founder can change it at any time. A true server-wide access code requires a backend/database.</span>
+      <span class="info">Teacher, learner and founder accounts are authenticated centrally by Firebase Authentication. No anonymous accounts are created and access is not stored in browser localStorage.</span>
     </div>
 
     <h3>🔐 Teacher Access Code</h3>
@@ -196,7 +222,12 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
         <span>I confirm that I have read, understood, and accepted the live lesson rules.</span>
       </label>
     </div>
-    <label>Your Name</label><input id="learnerName" placeholder="Enter your name">
+    <label>Registered Learner Access Code</label>
+    <div style="display:flex;gap:8px">
+      <input id="learnerAccessCode" type="password" placeholder="Enter your registered code" style="flex:1">
+      <button type="button" class="blue" onclick="authenticateLearner()">Verify</button>
+    </div>
+    <label>Your Name</label><input id="learnerName" placeholder="Enter your registered name">
     <div class="notice" style="margin-top:10px">
       <b>📹 Google Meet Room</b><br>
       <span class="info">This system is connected to the fixed Google Meet room. No temporary lesson code is required.</span>
@@ -266,7 +297,6 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 <footer>© 2026 CT-SMART EDUC — Anywhere, Learn, Understand, Apply</footer>
 
 <script>
-let api=null;
 let activeCode='';
 let isTeacher=false;
 const waiting=new Map();
@@ -282,32 +312,12 @@ function showMeeting(code,title){
   document.getElementById('roomHeading').textContent=title;
   document.getElementById('roomCodePill').textContent=code;
 }
-const GOOGLE_MEET_LINK='https://meet.google.com/ipj-aihy-oou';
 
-function createApi(code,displayName,teacher){
-  window.currentMeetingUser=displayName;
-  window.currentMeetingRole=teacher?'teacher':'learner';
-
-  const status=document.getElementById('meetConnectionStatus');
-  if(status){
-    status.textContent=teacher
-      ? 'Lesson created in CT-SMART EDUC. Tap Connect to Live Lesson when ready.'
-      : 'You are inside the CT-SMART EDUC lesson room. Tap Connect to Live Lesson to enter.';
-  }
-}
 
 function connectGoogleMeet(){
   const status=document.getElementById('meetConnectionStatus');
-  if(status) status.textContent='Connecting CT-SMART EDUC to the live Google Meet classroom...';
-
-  // Google Meet does not permit the actual meeting interface to be embedded
-  // inside a normal third-party iframe. The website therefore acts as the
-  // lesson gateway and sends the user to the fixed classroom only after
-  // entering through CT-SMART EDUC.
-  setTimeout(()=>{
-    if(status) status.textContent='Connected. Opening the CT-SMART EDUC Google Meet classroom...';
-    window.location.href=GOOGLE_MEET_LINK;
-  },500);
+  if(status) status.textContent='Opening the CT-SMART EDUC Google Meet classroom...';
+  window.open(GOOGLE_MEET_LINK,'_blank','noopener,noreferrer');
 }
 function hideDashboards(){
   document.getElementById('dashboardChoice').style.display='none';
@@ -323,54 +333,69 @@ function backToDashboard(){
   document.getElementById('dashboardChoice').style.display='block';
 }
 
-const DEFAULT_TEACHER_ACCESS_CODE='EDUC';
-const DEFAULT_LEARNER_ACCESS_CODE='MATH';
-const LUCK_ACCESS_CODE='LUCK';
+/*
+  Firebase authentication:
+  - No anonymous Firebase accounts are created.
+  - Every user must be pre-registered in Firebase Authentication.
+  - The user enters an access code; the app converts it into the registered
+    system email and signs in with Firebase Authentication.
+  - System email format:
+      teacher.<CODE>@ctsmart.educ
+      learner.<CODE>@ctsmart.educ
+      founder.<CODE>@ctsmart.educ
+  - The Firebase password for the account is the issued access code.
+  - Do NOT create these accounts from this public website. Create them in
+    Firebase Authentication (or later through a protected admin backend).
+*/
+const SYSTEM_EMAIL_DOMAIN='ctsmart.educ';
+const GOOGLE_MEET_LINK='https://meet.google.com/ipj-aihy-oou';
 
-function getLearnerAccessCode(){
-  return localStorage.getItem('ctsmart_learner_access_code') || DEFAULT_LEARNER_ACCESS_CODE;
+function normalizeCode(code){
+  return (code||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'');
 }
 
-function getTeacherAccessCode(){
-  return localStorage.getItem('ctsmart_teacher_access_code') || DEFAULT_TEACHER_ACCESS_CODE;
+function systemEmail(role,code){
+  return role.toLowerCase()+'.'+normalizeCode(code).toLowerCase()+'@'+SYSTEM_EMAIL_DOMAIN;
 }
 
-function isLocked(type){
-  return localStorage.getItem('ctsmart_lock_'+type)==='true';
+async function authenticateWithCode(role,code){
+  const clean=normalizeCode(code);
+  if(!clean) throw new Error('Please enter your access code.');
+
+  const email=systemEmail(role,clean);
+  try{
+    const credential=await window.firebaseApi.signInWithEmailAndPassword(
+      window.firebaseAuth,email,clean
+    );
+    return credential.user;
+  }catch(err){
+    console.error('Firebase authentication failed:',err);
+    if(err.code==='auth/invalid-credential' || err.code==='auth/wrong-password' ||
+       err.code==='auth/user-not-found'){
+      throw new Error('This access code is not registered or is incorrect.');
+    }
+    if(err.code==='auth/too-many-requests'){
+      throw new Error('Too many attempts. Please wait and try again.');
+    }
+    throw new Error('Unable to authenticate this account. Check Firebase Authentication settings.');
+  }
 }
 
 function openTeacherAccess(){
-  if(isLocked('teacher')){ alert('Teacher access is currently locked by the founder.'); return; }
   hideDashboards();
   document.getElementById('teacherAccess').style.display='block';
   document.getElementById('teacherAccessCode').value='';
   setTimeout(()=>document.getElementById('teacherAccessCode').focus(),50);
 }
 
-function verifyTeacherAccess(){
-  if(isLocked('teacher')){ alert('Teacher access is currently locked by the founder.'); return; }
-  const code=document.getElementById('teacherAccessCode').value.trim().toUpperCase();
-  if(code!==getTeacherAccessCode().toUpperCase()){
-    alert('Incorrect teacher access code. Please enter the correct code.');
-    return;
-  }
-  hideDashboards();
-  document.getElementById('teacherDashboard').style.display='block';
-}
-
 function openLearnerDashboard(){
-  if(isLocked('learner')){ alert('Learner access is currently locked by the founder.'); return; }
-
-  const code=prompt('Enter Learner Access Code:');
-  if(code===null) return;
-
-  if(code.trim().toUpperCase()!==getLearnerAccessCode().toUpperCase()){
-    alert('Incorrect learner access code. Please enter the correct code.');
-    return;
-  }
-
   hideDashboards();
   document.getElementById('learnerDashboard').style.display='block';
+  document.getElementById('learnerAccessCode').value='';
+  document.getElementById('learnerName').value='';
+  document.getElementById('rulesAccepted').checked=false;
+  document.getElementById('learnerDashboard').dataset.authenticated='false';
+  toggleJoinButton();
 }
 
 function openFounderAccess(){
@@ -380,72 +405,78 @@ function openFounderAccess(){
   setTimeout(()=>document.getElementById('founderAccessCode').focus(),50);
 }
 
-function verifyFounderAccess(){
-  const code=document.getElementById('founderAccessCode').value.trim().toUpperCase();
-  if(code!==LUCK_ACCESS_CODE){
-    alert('Incorrect founder access code.');
-    return;
+async function verifyTeacherAccess(){
+  try{
+    await authenticateWithCode('teacher',document.getElementById('teacherAccessCode').value);
+    hideDashboards();
+    document.getElementById('teacherDashboard').style.display='block';
+  }catch(err){
+    alert(err.message);
   }
-  hideDashboards();
-  document.getElementById('founderDashboard').style.display='block';
-  loadFounderSettings();
+}
+
+async function verifyFounderAccess(){
+  try{
+    await authenticateWithCode('founder',document.getElementById('founderAccessCode').value);
+    hideDashboards();
+    document.getElementById('founderDashboard').style.display='block';
+    loadFounderSettings();
+  }catch(err){
+    alert(err.message);
+  }
+}
+
+async function authenticateLearner(){
+  const code=document.getElementById('learnerAccessCode').value;
+  try{
+    const user=await authenticateWithCode('learner',code);
+    document.getElementById('learnerDashboard').dataset.authenticated='true';
+    document.getElementById('learnerDashboard').dataset.userUid=user.uid;
+    document.getElementById('learnerName').value=
+      user.displayName || document.getElementById('learnerName').value || '';
+    alert('Learner account recognized. You may now join the lesson.');
+    return true;
+  }catch(err){
+    document.getElementById('learnerDashboard').dataset.authenticated='false';
+    alert(err.message);
+    return false;
+  }
 }
 
 function loadFounderSettings(){
-  document.getElementById('currentTeacherCode').value=getTeacherAccessCode();
+  document.getElementById('currentTeacherCode').value='Managed in Firebase Authentication';
+  document.getElementById('currentLearnerCode').value='Managed in Firebase Authentication';
   document.getElementById('newTeacherCode').value='';
-  document.getElementById('currentLearnerCode').value=getLearnerAccessCode();
   document.getElementById('newLearnerCode').value='';
-  document.getElementById('lockTeacher').checked=isLocked('teacher');
-  document.getElementById('lockLearner').checked=isLocked('learner');
+  document.getElementById('lockTeacher').checked=false;
+  document.getElementById('lockLearner').checked=false;
 }
 
 function changeTeacherAccessCode(){
-  const newCode=document.getElementById('newTeacherCode').value.trim();
-  if(newCode.length<4){ alert('Teacher access code must contain at least 4 characters.'); return; }
-  localStorage.setItem('ctsmart_teacher_access_code',newCode);
-  document.getElementById('currentTeacherCode').value=newCode;
-  document.getElementById('newTeacherCode').value='';
-  alert('Teacher access code changed successfully.');
+  alert('Access codes are managed in Firebase Authentication. Change the password of the corresponding teacher account there.');
 }
-
 function changeLearnerAccessCode(){
-  const newCode=document.getElementById('newLearnerCode').value.trim();
-  if(newCode.length<4){ alert('Learner access code must contain at least 4 characters.'); return; }
-  localStorage.setItem('ctsmart_learner_access_code',newCode);
-  document.getElementById('currentLearnerCode').value=newCode;
-  document.getElementById('newLearnerCode').value='';
-  alert('Learner access code changed successfully.');
+  alert('Access codes are managed in Firebase Authentication. Change the password of the corresponding learner account there.');
 }
-
 function saveLocks(){
-  localStorage.setItem('ctsmart_lock_teacher',document.getElementById('lockTeacher').checked);
-  localStorage.setItem('ctsmart_lock_learner',document.getElementById('lockLearner').checked);
-  alert('Access settings saved.');
+  alert('For school-wide locking, disable the relevant Firebase Authentication account from your protected administrator process.');
 }
-
 function lockAllUsers(){
-  localStorage.setItem('ctsmart_lock_teacher','true');
-  localStorage.setItem('ctsmart_lock_learner','true');
-  loadFounderSettings();
-  alert('Teacher and learner access are now locked.');
+  alert('Use the protected Firebase administrator process to disable teacher/learner accounts. Do not use browser localStorage for security.');
 }
-
 function unlockAllUsers(){
-  localStorage.setItem('ctsmart_lock_teacher','false');
-  localStorage.setItem('ctsmart_lock_learner','false');
-  loadFounderSettings();
-  alert('Teacher and learner access are now unlocked.');
+  alert('Use the protected Firebase administrator process to re-enable teacher/learner accounts.');
 }
+function applyAccessLocks(){}
 
-function applyAccessLocks(){
-  const teacherTile=document.querySelector('.dashboard-tile[onclick="openTeacherAccess()"]');
-  const learnerTile=document.querySelector('.dashboard-tile[onclick="openLearnerDashboard()"]');
-  if(teacherTile){ teacherTile.style.opacity=isLocked('teacher')?'.5':'1'; }
-  if(learnerTile){ learnerTile.style.opacity=isLocked('learner')?'.5':'1'; }
+async function signOutCurrentUser(){
+  try{
+    await window.firebaseApi.signOut(window.firebaseAuth);
+  }catch(err){
+    console.error(err);
+  }
+  backToDashboard();
 }
-
-window.addEventListener('load',applyAccessLocks);
 
 function addSubject(){
   const name=prompt('Enter the subject name:');
@@ -487,13 +518,29 @@ function startLearnerLesson(){
     return;
   }
   const name=document.getElementById('learnerName').value.trim();
-  if(!name){alert('Please enter your name.');return;}
-  const code='GOOGLE-MEET';
+  if(!name){alert('Please enter your registered name.');return;}
+  if(document.getElementById('learnerDashboard').dataset.authenticated!=='true'){
+    alert('Please verify your registered learner access code first.');
+    return;
+  }
   isTeacher=false;
-  showMeeting(code,'Google Meet Live Lesson');
-  createApi(code,name,false);
+  showMeeting('GOOGLE-MEET','Google Meet Live Lesson');
+  document.getElementById('meetConnectionStatus').textContent=
+    'Account verified. Tap Connect to Live Lesson to open Google Meet.';
 }
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+</script>
+<script>
+window.addEventListener('load',()=>{
+  if(window.firebaseApi && window.firebaseApi.onAuthStateChanged){
+    window.firebaseApi.onAuthStateChanged(window.firebaseAuth,(user)=>{
+      if(!user){
+        const panel=document.getElementById('learnerDashboard');
+        if(panel) panel.dataset.authenticated='false';
+      }
+    });
+  }
+});
 </script>
 <script>
 if ('serviceWorker' in navigator) {
