@@ -1057,7 +1057,17 @@ window.addEventListener('load',async()=>{
     accessSettings.learnerLocked=!!data?.learnerLocked;
   }catch(err){
     console.warn('Could not reach the server to determine setup status:',err);
-    configured=null;
+    if(isNetworkError(err)){
+      // Genuine connectivity problem — show the No Network screen.
+      configured=null;
+    }else{
+      // Some other error (e.g. a permissions or config issue unrelated to
+      // connectivity). The network itself is fine, so we must not show
+      // the "No Network" banner here — fail safe to the normal dashboard
+      // instead, since we still must never expose the setup screen when
+      // we can't positively confirm the system is unconfigured.
+      configured=true;
+    }
   }
 
   if(configured===null){
