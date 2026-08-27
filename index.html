@@ -48,7 +48,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 <div class="brand">🎓 CT-SMART EDUC<span class="tag">Anywhere, Learn, Understand, Apply</span><span style="display:block;color:#ffffff;font-size:.72rem;margin-top:6px;letter-spacing:.5px">HOST: DADDY FAVOUR | CONTACT: 0757132542 / 0786814513 / 0755694263</span></div>
 <div class="hero" id="introHero" style="display:none">
 <h1>Temporary Codes.<br><span>Teacher-Controlled Entry.</span></h1>
-<p>The teacher starts a live lesson, activates the waiting lobby, and sees learners who are waiting. The teacher then chooses <b>Accept</b> or <b>Reject</b> for each learner.</p>
+<p>The teacher starts a live lesson using the built-in Google Meet room. Teachers and learners use the same Google Meet link, while Google Meet provides the actual meeting and participant controls.</p>
 </div>
 </div>
 </header>
@@ -71,7 +71,7 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
       <div class="dashboard-tile" onclick="openLearnerDashboard()">
         <div class="tile-icon">🎓</div>
         <h2>Learner</h2>
-        <p>Join a live lesson using your lesson code.</p>
+        <p>Join the live Google Meet lesson.</p>
       </div>
 
       <div class="dashboard-tile" onclick="openFounderAccess()">
@@ -109,9 +109,9 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
       <label>Lesson Title</label><input id="lessonTitle" placeholder="e.g. Algebra Revision">
       <button class="green wide" onclick="startTeacherLesson()">Create Code & Start Teacher Room</button>
       <div id="teacherCodeBox" class="codebox">
-        <div class="info">SHARE THIS TEMPORARY LESSON CODE</div>
+        <div class="info">GOOGLE MEET LIVE LESSON</div>
         <div id="teacherCode" class="code"></div>
-        <p class="info">Learners enter this code and their name. When the lobby is active, they wait until you accept them.</p>
+        <p class="info">The live lesson opens in the fixed Google Meet room. Learners use the same Google Meet link.</p>
       </div>
     </div>
   </div>
@@ -184,7 +184,10 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
       </label>
     </div>
     <label>Your Name</label><input id="learnerName" placeholder="Enter your name">
-    <label>Temporary Lesson Code</label><input id="learnerCode" placeholder="e.g. CT-MATH-4827" style="text-transform:uppercase">
+    <div class="notice" style="margin-top:10px">
+      <b>📹 Google Meet Room</b><br>
+      <span class="info">This system is connected to the fixed Google Meet room. No temporary lesson code is required.</span>
+    </div>
     <button id="joinButton" class="blue wide" onclick="startLearnerLesson()" disabled style="opacity:.45;cursor:not-allowed">Read & Accept Rules to Join</button>
     <div class="notice" style="margin-top:18px">
       <b>Waiting access:</b><br><span class="info">After joining, you may be placed in the waiting lobby. The teacher sees your request and decides whether to <b>Accept</b> or <b>Reject</b> it.</span>
@@ -202,11 +205,46 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 <div id="meetingStatus" class="info">Connecting to live lesson...</div>
 </div>
 <div class="meeting-layout">
-<div id="meet" class="meeting"></div>
+<div class="meeting" style="background:#fff;color:#172033;padding:28px;display:flex;align-items:center;justify-content:center;text-align:center">
+  <div style="max-width:680px;width:100%">
+    <div style="font-size:4rem;margin-bottom:10px">🎓</div>
+    <h2 style="margin-bottom:10px">CT-SMART EDUC — Live Lesson Room</h2>
+    <p class="info" style="font-size:1rem">
+      You have entered the lesson room through the CT-SMART EDUC website.
+      Your lesson is connected to the school's Google Meet room.
+    </p>
+
+    <div class="notice" style="margin:20px 0;text-align:left">
+      <b>📡 Connected Lesson Room</b><br>
+      <span class="info">
+        Meeting: CT-SMART EDUC Live Class<br>
+        Connection: Google Meet<br>
+        Room: ipj-aihy-oou
+      </span>
+    </div>
+
+    <button class="green wide" onclick="connectGoogleMeet()">
+      🎥 Connect to Live Lesson
+    </button>
+
+    <div id="meetConnectionStatus" class="info" style="margin-top:14px">
+      Waiting to connect...
+    </div>
+  </div>
+</div>
+
 <div id="teacherWaitingPanel" class="waiting" style="display:none">
-<h3>⏳ Waiting Learners <span id="waitCount" class="count">0</span></h3>
-<div id="waitingList"><div class="empty">No learners are waiting.</div></div>
-<p class="info">Use <b>Accept</b> to admit a learner or <b>Reject</b> to deny entry.</p>
+<h3>👨‍🏫 Teacher Controls</h3>
+<div class="notice">
+  <b>Your lesson room is connected.</b><br>
+  <span class="info">
+    The CT-SMART EDUC website controls access to this lesson page. Google Meet handles
+    the live audio/video meeting and its participant controls.
+  </span>
+</div>
+<p class="info" style="margin-top:14px">
+  Learners who enter through the website are directed to the same Google Meet classroom.
+</p>
 </div>
 </div>
 </div>
@@ -224,9 +262,6 @@ function makeCode(){
   const subject=document.getElementById('subject').value.toUpperCase().replace(/[^A-Z]/g,'').slice(0,5);
   return 'CT-'+subject+'-'+Math.floor(1000+Math.random()*9000);
 }
-function roomFromCode(code){
-  return 'CTSMARTEDUC-'+code.trim().toUpperCase().replace(/[^A-Z0-9-]/g,'');
-}
 function showMeeting(code,title){
   activeCode=code;
   document.getElementById('setup').style.display='none';
@@ -234,50 +269,32 @@ function showMeeting(code,title){
   document.getElementById('roomHeading').textContent=title;
   document.getElementById('roomCodePill').textContent=code;
 }
+const GOOGLE_MEET_LINK='https://meet.google.com/ipj-aihy-oou';
+
 function createApi(code,displayName,teacher){
-  if(typeof JitsiMeetExternalAPI==='undefined'){
-    alert('The live meeting service did not load. Please check your internet connection.');
-    return;
+  window.currentMeetingUser=displayName;
+  window.currentMeetingRole=teacher?'teacher':'learner';
+
+  const status=document.getElementById('meetConnectionStatus');
+  if(status){
+    status.textContent=teacher
+      ? 'Lesson created in CT-SMART EDUC. Tap Connect to Live Lesson when ready.'
+      : 'You are inside the CT-SMART EDUC lesson room. Tap Connect to Live Lesson to enter.';
   }
-  const domain='meet.jit.si';
-  api=new JitsiMeetExternalAPI(domain,{
-    roomName:roomFromCode(code),
-    width:'100%',
-    height:'100%',
-    parentNode:document.querySelector('#meet'),
-    userInfo:{displayName:displayName},
-    configOverwrite:{
-      prejoinConfig:{enabled:true},
-      lobby:{autoKnock:true,enableChat:false}
-    }
-  });
+}
 
-  api.addListener('videoConferenceJoined',()=>{
-    document.getElementById('meetingStatus').textContent='You are in the live lesson.';
-  });
+function connectGoogleMeet(){
+  const status=document.getElementById('meetConnectionStatus');
+  if(status) status.textContent='Connecting CT-SMART EDUC to the live Google Meet classroom...';
 
-  if(teacher){
-    api.addListener('participantRoleChanged',(event)=>{
-      if(event.role==='moderator'){
-        document.getElementById('meetingStatus').textContent='Teacher controls ready. Activating waiting lobby...';
-        try{
-          api.executeCommand('toggleLobby',true);
-          document.getElementById('meetingStatus').textContent='Waiting lobby is active. Learners must wait for your decision.';
-        }catch(e){
-          document.getElementById('meetingStatus').textContent='Lobby control may depend on the meeting service configuration.';
-        }
-      }
-    });
-
-    api.addListener('knockingParticipant',(event)=>{
-      const p=event.participant;
-      if(!p || !p.id) return;
-      waiting.set(p.id,{id:p.id,name:p.name||'Unnamed learner'});
-      renderWaiting();
-    });
-  }else{
-    document.getElementById('meetingStatus').textContent='Join the meeting. If the teacher has activated the lobby, wait for acceptance.';
-  }
+  // Google Meet does not permit the actual meeting interface to be embedded
+  // inside a normal third-party iframe. The website therefore acts as the
+  // lesson gateway and sends the user to the fixed classroom only after
+  // entering through CT-SMART EDUC.
+  setTimeout(()=>{
+    if(status) status.textContent='Connected. Opening the CT-SMART EDUC Google Meet classroom...';
+    window.location.href=GOOGLE_MEET_LINK;
+  },500);
 }
 function hideDashboards(){
   document.getElementById('dashboardChoice').style.display='none';
@@ -415,7 +432,7 @@ function startTeacherLesson(){
   document.getElementById('teacherCodeBox').style.display='block';
   isTeacher=true;
   document.getElementById('teacherWaitingPanel').style.display='block';
-  showMeeting(code,document.getElementById('lessonTitle').value.trim()||'Teacher Live Lesson');
+  showMeeting(code,document.getElementById('lessonTitle').value.trim()||'Google Meet Live Lesson');
   createApi(code,name,true);
 }
 function toggleJoinButton(){
@@ -432,36 +449,11 @@ function startLearnerLesson(){
     return;
   }
   const name=document.getElementById('learnerName').value.trim();
-  const code=document.getElementById('learnerCode').value.trim().toUpperCase();
   if(!name){alert('Please enter your name.');return;}
-  if(!/^CT-[A-Z]+-\d{4}$/.test(code)){alert('Enter a valid lesson code, for example CT-MATH-4827.');return;}
+  const code='GOOGLE-MEET';
   isTeacher=false;
-  showMeeting(code,'Live Lesson');
+  showMeeting(code,'Google Meet Live Lesson');
   createApi(code,name,false);
-}
-function renderWaiting(){
-  const list=document.getElementById('waitingList');
-  document.getElementById('waitCount').textContent=waiting.size;
-  if(waiting.size===0){list.innerHTML='<div class="empty">No learners are waiting.</div>';return;}
-  list.innerHTML='';
-  waiting.forEach(p=>{
-    const item=document.createElement('div');
-    item.className='waiter';
-    item.innerHTML='<div class="waiter-name">👤 '+escapeHtml(p.name)+'</div>';
-    const actions=document.createElement('div');actions.className='waiter-actions';
-    const accept=document.createElement('button');accept.className='green';accept.textContent='✓ Accept';
-    accept.onclick=()=>answerWaiting(p.id,true);
-    const reject=document.createElement('button');reject.className='red';reject.textContent='✕ Reject';
-    reject.onclick=()=>answerWaiting(p.id,false);
-    actions.append(accept,reject);item.appendChild(actions);list.appendChild(item);
-  });
-}
-function answerWaiting(id,approved){
-  if(api){
-    try{api.executeCommand('answerKnockingParticipant',id,approved);}
-    catch(e){alert('The meeting service could not process this request.');return;}
-  }
-  waiting.delete(id);renderWaiting();
 }
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 </script>
