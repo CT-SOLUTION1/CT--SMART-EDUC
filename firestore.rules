@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Shared school access configuration.
+    // IMPORTANT: This demo/browser architecture cannot securely identify
+    // a Founder before the Founder signs in. For production use, protect
+    // this document with a custom claim or a Cloud Function/Admin SDK.
+    match /systemSettings/access {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

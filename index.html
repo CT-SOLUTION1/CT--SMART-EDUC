@@ -48,6 +48,13 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
     signOut,
     onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+  import {
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc,
+    onSnapshot
+  } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAazmoaEKQzdF9rXh7rPDNocml6lduhcB4",
@@ -60,10 +67,15 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 
   const firebaseApp = initializeApp(firebaseConfig);
   window.firebaseAuth = getAuth(firebaseApp);
+  window.firebaseDb = getFirestore(firebaseApp);
   window.firebaseApi = {
     signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    doc,
+    getDoc,
+    setDoc,
+    onSnapshot
   };
 </script>
 
@@ -82,12 +94,42 @@ footer{background:var(--navy);color:#dbe6f2;text-align:center;padding:25px;font-
 <section id="setup">
 <div class="container">
 
+<div id="firstSetup" class="dashboard-panel" style="display:block">
+  <div class="access-box">
+    <h2>⚙️ Initial System Setup</h2>
+    <p class="info">Set the access codes for this installation. These codes are then used to create or identify the corresponding Firebase Authentication accounts.</p>
+
+    <label>Teacher Access Code</label>
+    <input id="setupTeacherCode" type="password" placeholder="Set teacher code">
+
+    <label>Learner Access Code</label>
+    <input id="setupLearnerCode" type="password" placeholder="Set learner code">
+
+    <label>Founder Access Code</label>
+    <input id="setupFounderCode" type="password" placeholder="Set founder code">
+
+    <button class="green wide" onclick="saveInitialCodes()">Save Access Codes</button>
+
+    <div class="notice" style="margin-top:18px">
+      <b>Important:</b>
+      <span class="info">The codes are not hard-coded into this HTML file. Set them during setup, then register matching Firebase Authentication accounts. The same registered credentials can then be used on different devices.</span>
+    </div>
+  </div>
+</div>
+
 <div id="dashboardChoice">
   <div class="card">
     <h1 style="text-align:center;margin-bottom:8px">Choose Your Dashboard</h1>
     <p class="info" style="text-align:center">Select the dashboard that matches your role.</p>
 
     <div class="dashboard-choice">
+      <div class="dashboard-tile" onclick="openCodeSetup()">
+        <div class="tile-icon">⚙️</div>
+        <h2>Access Setup</h2>
+        <p>Set or change the Teacher, Learner and Founder access codes.</p>
+      </div>
+
+      
       <div class="dashboard-tile" onclick="openTeacherAccess()">
         <div class="tile-icon">👨‍🏫</div>
         <h2>Teacher</h2>
@@ -320,6 +362,7 @@ function connectGoogleMeet(){
   window.open(GOOGLE_MEET_LINK,'_blank','noopener,noreferrer');
 }
 function hideDashboards(){
+  document.getElementById('firstSetup').style.display='none';
   document.getElementById('dashboardChoice').style.display='none';
   document.getElementById('teacherAccess').style.display='none';
   document.getElementById('teacherDashboard').style.display='none';
@@ -360,6 +403,10 @@ function systemEmail(role,code){
 
 async function authenticateWithCode(role,code){
   const clean=normalizeCode(code);
+  const configured=getConfiguredCode(role);
+  if(configured && clean!==configured){
+    throw new Error('This access code is not the code currently configured for this role.');
+  }
   if(!clean) throw new Error('Please enter your access code.');
 
   const email=systemEmail(role,clean);
@@ -379,6 +426,80 @@ async function authenticateWithCode(role,code){
     }
     throw new Error('Unable to authenticate this account. Check Firebase Authentication settings.');
   }
+}
+
+let accessSettings = {
+  learnerCode: '',
+  teacherCode: '',
+  founderCode: '',
+  learnerLocked: false,
+  teacherLocked: false
+};
+
+const ACCESS_DOC = ['systemSettings','access'];
+
+async function loadAccessSettings(){
+  try{
+    const ref=window.firebaseApi.doc(window.firebaseDb,...ACCESS_DOC);
+    const snap=await window.firebaseApi.getDoc(ref);
+    if(snap.exists()){
+      accessSettings={...accessSettings,...snap.data()};
+    }
+  }catch(err){
+    console.error('Could not load access settings:',err);
+  }
+  return accessSettings;
+}
+
+function getConfiguredCode(role){
+  return accessSettings[role+'Code'] || '';
+}
+
+async function saveAccessSettings(){
+  const ref=window.firebaseApi.doc(window.firebaseDb,...ACCESS_DOC);
+  await window.firebaseApi.setDoc(ref,{
+    ...accessSettings,
+    updatedAt:new Date().toISOString()
+  },{merge:true});
+}
+
+async function saveInitialCodes(){
+  const teacher=normalizeCode(document.getElementById('setupTeacherCode').value);
+  const learner=normalizeCode(document.getElementById('setupLearnerCode').value);
+  const founder=normalizeCode(document.getElementById('setupFounderCode').value);
+
+  if(teacher.length<4 || learner.length<4 || founder.length<4){
+    alert('Each access code must contain at least 4 characters.');
+    return;
+  }
+
+  accessSettings.teacherCode=teacher;
+  accessSettings.learnerCode=learner;
+  accessSettings.founderCode=founder;
+  accessSettings.teacherLocked=false;
+  accessSettings.learnerLocked=false;
+
+  try{
+    await saveAccessSettings();
+    alert('Access codes saved centrally in Firebase. They can now be used on different devices.');
+    hideDashboards();
+    document.getElementById('dashboardChoice').style.display='block';
+  }catch(err){
+    console.error(err);
+    alert('Could not save the access codes. Make sure Firestore is enabled and its rules allow the Founder administrator to write this document.');
+  }
+}
+
+function hasConfiguredCodes(){
+  return !!(accessSettings.teacherCode && accessSettings.learnerCode && accessSettings.founderCode);
+}
+
+function openCodeSetup(){
+  hideDashboards();
+  document.getElementById('firstSetup').style.display='block';
+  document.getElementById('setupTeacherCode').value=getConfiguredCode('teacher');
+  document.getElementById('setupLearnerCode').value=getConfiguredCode('learner');
+  document.getElementById('setupFounderCode').value=getConfiguredCode('founder');
 }
 
 function openTeacherAccess(){
@@ -443,29 +564,71 @@ async function authenticateLearner(){
   }
 }
 
-function loadFounderSettings(){
-  document.getElementById('currentTeacherCode').value='Managed in Firebase Authentication';
-  document.getElementById('currentLearnerCode').value='Managed in Firebase Authentication';
+async function loadFounderSettings(){
+  await loadAccessSettings();
+  document.getElementById('currentTeacherCode').value=getConfiguredCode('teacher') || 'Not configured';
+  document.getElementById('currentLearnerCode').value=getConfiguredCode('learner') || 'Not configured';
   document.getElementById('newTeacherCode').value='';
   document.getElementById('newLearnerCode').value='';
-  document.getElementById('lockTeacher').checked=false;
-  document.getElementById('lockLearner').checked=false;
+  document.getElementById('lockTeacher').checked=!!accessSettings.teacherLocked;
+  document.getElementById('lockLearner').checked=!!accessSettings.learnerLocked;
 }
 
-function changeTeacherAccessCode(){
-  alert('Access codes are managed in Firebase Authentication. Change the password of the corresponding teacher account there.');
+async function changeTeacherAccessCode(){
+  const newCode=normalizeCode(document.getElementById('newTeacherCode').value);
+  if(newCode.length<4){ alert('Teacher access code must contain at least 4 characters.'); return; }
+  accessSettings.teacherCode=newCode;
+  try{
+    await saveAccessSettings();
+    document.getElementById('currentTeacherCode').value=newCode;
+    document.getElementById('newTeacherCode').value='';
+    alert('Teacher access code updated. The new code is now the central code for all devices.');
+  }catch(err){
+    alert('Unable to update the teacher code in Firebase.');
+  }
 }
-function changeLearnerAccessCode(){
-  alert('Access codes are managed in Firebase Authentication. Change the password of the corresponding learner account there.');
+async function changeLearnerAccessCode(){
+  const newCode=normalizeCode(document.getElementById('newLearnerCode').value);
+  if(newCode.length<4){ alert('Learner access code must contain at least 4 characters.'); return; }
+  accessSettings.learnerCode=newCode;
+  try{
+    await saveAccessSettings();
+    document.getElementById('currentLearnerCode').value=newCode;
+    document.getElementById('newLearnerCode').value='';
+    alert('Learner access code updated. The new code is now the central code for all devices.');
+  }catch(err){
+    alert('Unable to update the learner code in Firebase.');
+  }
 }
-function saveLocks(){
-  alert('For school-wide locking, disable the relevant Firebase Authentication account from your protected administrator process.');
+async function saveLocks(){
+  accessSettings.teacherLocked=document.getElementById('lockTeacher').checked;
+  accessSettings.learnerLocked=document.getElementById('lockLearner').checked;
+  try{
+    await saveAccessSettings();
+    alert('Access lock settings saved centrally.');
+  }catch(err){
+    alert('Unable to save access lock settings.');
+  }
 }
-function lockAllUsers(){
-  alert('Use the protected Firebase administrator process to disable teacher/learner accounts. Do not use browser localStorage for security.');
+async function lockAllUsers(){
+  accessSettings.teacherLocked=true;
+  accessSettings.learnerLocked=true;
+  try{
+    await saveAccessSettings();
+    document.getElementById('lockTeacher').checked=true;
+    document.getElementById('lockLearner').checked=true;
+    alert('Teacher and learner access have been locked.');
+  }catch(err){ alert('Unable to save the lock settings.'); }
 }
-function unlockAllUsers(){
-  alert('Use the protected Firebase administrator process to re-enable teacher/learner accounts.');
+async function unlockAllUsers(){
+  accessSettings.teacherLocked=false;
+  accessSettings.learnerLocked=false;
+  try{
+    await saveAccessSettings();
+    document.getElementById('lockTeacher').checked=false;
+    document.getElementById('lockLearner').checked=false;
+    alert('Teacher and learner access have been unlocked.');
+  }catch(err){ alert('Unable to save the unlock settings.'); }
 }
 function applyAccessLocks(){}
 
@@ -531,7 +694,30 @@ function startLearnerLesson(){
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 </script>
 <script>
-window.addEventListener('load',()=>{
+
+async function startAccessSettingsSync(){
+  try{
+    const ref=window.firebaseApi.doc(window.firebaseDb,...ACCESS_DOC);
+    window.firebaseApi.onSnapshot(ref,(snap)=>{
+      if(snap.exists()){
+        accessSettings={...accessSettings,...snap.data()};
+      }
+    });
+  }catch(err){
+    console.error('Access settings sync unavailable:',err);
+  }
+}
+
+window.addEventListener('load',async()=>{
+  await loadAccessSettings();
+  startAccessSettingsSync();
+  if(!hasConfiguredCodes()){
+    hideDashboards();
+    document.getElementById('firstSetup').style.display='block';
+  } else {
+    hideDashboards();
+    document.getElementById('dashboardChoice').style.display='block';
+  }
   if(window.firebaseApi && window.firebaseApi.onAuthStateChanged){
     window.firebaseApi.onAuthStateChanged(window.firebaseAuth,(user)=>{
       if(!user){
